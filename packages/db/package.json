@@ -1,0 +1,21 @@
+{
+  "name": "@hidrobr/db",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "migrate": "prisma migrate dev",
+    "migrate:prod": "prisma migrate deploy",
+    "seed": "ts-node seeds/index.ts",
+    "studio": "prisma studio",
+    "reset": "prisma migrate reset --force",
+    "generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.2"
+  },
+  "devDependencies": {
+    "prisma": "^5.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.2"
+  }
+}
