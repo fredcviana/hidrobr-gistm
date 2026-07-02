@@ -2,21 +2,34 @@
   "name": "hidrobr-gistm",
   "version": "1.0.0",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
-    "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web",
-    "db:migrate": "npm run migrate -w packages/db",
-    "db:seed": "npm run seed -w packages/db",
-    "db:studio": "npm run studio -w packages/db",
-    "db:reset": "npm run reset -w packages/db",
-    "lint": "concurrently \"npm run lint -w apps/api\" \"npm run lint -w apps/web\"",
-    "test": "concurrently \"npm run test -w apps/api\" \"npm run test -w apps/web\""
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.43.4",
+    "@tanstack/react-query": "^5.28.6",
+    "lucide-react": "^0.363.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.51.1",
+    "react-router-dom": "^6.22.3",
+    "recharts": "^2.12.2",
+    "zustand": "^4.5.2",
+    "zod": "^3.22.4",
+    "@hookform/resolvers": "^3.3.4",
+    "clsx": "^2.1.0"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@types/react": "^18.2.74",
+    "@types/react-dom": "^18.2.24",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.4.3",
+    "vite": "^5.2.6"
   }
 }
