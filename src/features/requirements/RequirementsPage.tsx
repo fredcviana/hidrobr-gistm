@@ -209,7 +209,7 @@ function RequirementModal({req,response,cycleId,onClose}:{req:any;response:any;c
         <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-gray-200 bg-gray-50 flex-shrink-0">
           <button className="btn-secondary btn-sm" onClick={onClose}>Cancelar</button>
           {tab==='resposta'&&(
-            <button className="btn-secondary btn-sm" disabled={saveMut.isPending} onClick={()=>saveMut.mutate()}>
+            <button className="btn-secondary btn-sm" disabled={saveMut.isPending} onClick={()=>saveMut.mutate(undefined)}>
               {saveMut.isPending?<Loader2 className="w-3 h-3 animate-spin"/>:'💾'} Salvar
             </button>
           )}
