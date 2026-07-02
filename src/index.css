@@ -4,21 +4,27 @@
 
 @layer base {
   * { box-sizing: border-box; }
-  body { @apply font-sans text-sm text-gray-900 bg-gray-50 antialiased; }
+  body { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; color: #1F2937; background: #F9FAFB; }
   ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
+  ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
 }
 
 @layer components {
-  .card { @apply bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm; }
-  .badge { @apply inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap; }
-  .btn { @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-semibold border transition-all cursor-pointer disabled:opacity-50; }
-  .btn-primary { @apply btn bg-brand-900 text-white border-brand-900 hover:bg-brand-800; }
-  .btn-secondary { @apply btn bg-white text-gray-700 border-gray-300 hover:bg-gray-50; }
-  .btn-success { @apply btn bg-emerald-600 text-white border-emerald-600 hover:brightness-90; }
-  .btn-sm { @apply px-3 py-1.5 text-xs; }
-  .form-input { @apply w-full px-3 py-2 text-[13px] border border-gray-300 rounded-lg focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-400/20 bg-white transition-colors; }
-  .form-label { @apply block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1.5; }
-  .sidebar-item { @apply flex items-center gap-3 px-4 py-2 text-[13px] font-medium text-white/55 hover:text-white hover:bg-white/10 transition-all cursor-pointer relative rounded-lg mx-2; }
-  .sidebar-item.active { @apply text-white bg-white/12; }
+  .card { background: white; border-radius: 12px; border: 1px solid #E5E7EB; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid transparent; transition: all 0.15s; cursor: pointer; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #002B3D; color: white; border-color: #002B3D; }
+  .btn-primary:hover { background: #003D4F; }
+  .btn-secondary { background: white; color: #374151; border-color: #D1D5DB; }
+  .btn-secondary:hover { background: #F9FAFB; }
+  .btn-success { background: #059669; color: white; border-color: #059669; }
+  .btn-success:hover { filter: brightness(0.92); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .form-input { width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid #D1D5DB; border-radius: 8px; background: white; color: #1F2937; transition: border-color 0.15s; outline: none; font-family: inherit; }
+  .form-input:focus { border-color: #0A9396; box-shadow: 0 0 0 3px rgba(10,147,150,0.15); }
+  .form-label { display: block; font-size: 11px; font-weight: 700; color: #4B5563; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .sidebar-item { display: flex; align-items: center; gap: 12px; padding: 8px 16px; font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.55); transition: all 0.12s; cursor: pointer; position: relative; border-radius: 8px; margin: 0 8px; }
+  .sidebar-item:hover { color: white; background: rgba(255,255,255,0.1); }
+  .sidebar-item.active { color: white; background: rgba(255,255,255,0.12); }
 }
