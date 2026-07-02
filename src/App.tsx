@@ -2,7 +2,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { useAuthStore, isHidrobr } from '@/store/authStore'
+import { useAuthStore } from '@/store/authStore'
 import { AppLayout } from '@/components/AppLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
