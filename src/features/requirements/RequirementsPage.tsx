@@ -227,7 +227,7 @@ function RequirementModal({req,response,cycleId,onClose}:{req:any;response:any;c
           )}
           {tab==='avaliacao'&&hb&&!hasAssessment&&(
             <button className="btn-success btn-sm inline-flex items-center gap-1.5"
-              onClick={()=>assessMut.mutate()}
+              onClick={()=>assessMut.mutate(undefined)}
               disabled={assessMut.isPending||!hidrScore||hidrText.length<20}>
               {assessMut.isPending?<Loader2 className="w-3 h-3 animate-spin"/>:<CheckCircle2 className="w-3 h-3"/>}
               Publicar avaliação
