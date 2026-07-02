@@ -12,6 +12,7 @@ import { ActionPlanPage } from '@/features/action-plan/ActionPlanPage'
 import { AcademyPage } from '@/features/academy/AcademyPage'
 import { ClientsPage } from '@/features/clients/ClientsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
+import { GistmSettingsPage } from '@/features/settings/GistmSettingsPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
@@ -30,10 +31,8 @@ export default function App() {
   const { setProfile, setLoading } = useAuthStore()
 
   useEffect(() => {
-    // Escuta mudanças de autenticação do Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        // Busca o perfil completo do usuário
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
@@ -45,7 +44,6 @@ export default function App() {
       }
       setLoading(false)
     })
-
     return () => subscription.unsubscribe()
   }, [setProfile, setLoading])
 
@@ -62,6 +60,7 @@ export default function App() {
           <Route path="academy" element={<AcademyPage />} />
           <Route path="clients" element={<ClientsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="gistm-settings" element={<GistmSettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
