@@ -36,7 +36,7 @@ export default function App() {
         // Busca o perfil completo do usuário
         const { data: profile } = await supabase
           .from('profiles')
-          .select('*, organization:organizations(id,name,segment,logo_url)')
+          .select('*')
           .eq('id', session.user.id)
           .single()
         setProfile(profile)
