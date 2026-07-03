@@ -157,7 +157,7 @@ export function AcademyPage() {
           <h1 className="text-xl font-bold text-gray-900">GISTM Academy</h1>
           <p className="text-sm text-gray-500 mt-0.5">Trilhas de capacitação em gestão de barragens de rejeitos</p>
         </div>
-        {isAdmin && <button className="btn-primary inline-flex items-center gap-2" onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> Novo conteúdo</button>}
+        {isAdmin && <button style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'8px 16px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',background:'#002B3D',color:'white',border:'none',cursor:'pointer'}} onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> Novo conteúdo</button>}
       </div>
 
       {/* Progresso pessoal */}
@@ -199,7 +199,7 @@ export function AcademyPage() {
         <div className="card p-12 text-center">
           <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500 font-medium">Nenhum conteúdo disponível</p>
-          {isAdmin && <button className="btn-primary mt-4" onClick={() => setShowCreate(true)}>Criar primeiro conteúdo</button>}
+          {isAdmin && <button style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'8px 16px',borderRadius:'8px',marginTop:'16px',fontSize:'13px',fontWeight:'600',background:'#002B3D',color:'white',border:'none',cursor:'pointer'}} onClick={() => setShowCreate(true)}>Criar primeiro conteúdo</button>}
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-4">
