@@ -154,7 +154,7 @@ export function AcademyPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">GISTM Academy</h1>
+          <h1 className="text-xl font-bold text-gray-900">HBR Academy</h1>
           <p className="text-sm text-gray-500 mt-0.5">Trilhas de capacitação em gestão de barragens de rejeitos</p>
         </div>
         {isAdmin && <button style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'8px 16px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',background:'#002B3D',color:'white',border:'none',cursor:'pointer'}} onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> Novo conteúdo</button>}
