@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Building2, Users, ChevronRight, Loader2, X, Save, AlertCircle, Eye } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
+import { CreateUserModal } from './CreateUserModal'
 
 // ── Modal genérico ────────────────────────────────────────────
 function Modal({ title, onClose, children, footer }: {
@@ -77,64 +78,6 @@ function CreateOrgModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-// ── Criar Usuário ─────────────────────────────────────────────
-function CreateUserModal({ orgId, orgName, onClose }: { orgId: string; orgName: string; onClose: () => void }) {
-  const qc = useQueryClient()
-  const [form, setForm] = useState({ full_name: '', email: '', password: '', role: 'client_user', job_title: '' })
-  const [error, setError] = useState('')
-
-  const mut = useMutation({
-    mutationFn: async () => {
-      // Cria usuário no Supabase Auth via Admin API (usando service role não disponível no client)
-      // Workaround: inserir direto na tabela de convites ou usar função RPC
-      const { data, error: authErr } = await supabase.auth.admin?.createUser?.({
-        email: form.email, password: form.password,
-        user_metadata: { full_name: form.full_name, role: form.role },
-        email_confirm: true,
-      }) as any
-
-      if (authErr) throw authErr
-      if (data?.user) {
-        await supabase.from('profiles').insert({
-          id: data.user.id, full_name: form.full_name,
-          role: form.role, organization_id: orgId, job_title: form.job_title || null,
-        })
-      }
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['org-users', orgId] }); onClose() },
-    onError: (e: any) => setError(e.message ?? 'Erro ao criar usuário. Use o painel do Supabase para criar usuários.'),
-  })
-
-  return (
-    <Modal title={`Novo usuário — ${orgName}`} onClose={onClose}
-      footer={<>
-        <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn-primary inline-flex items-center gap-2" onClick={() => mut.mutate()} disabled={mut.isPending || !form.full_name || !form.email || !form.password}>
-          {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Criar usuário
-        </button>
-      </>}>
-      {error && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 mb-4">
-          <strong>Atenção:</strong> {error}
-          <div className="mt-2 text-xs">
-            Para criar usuários, acesse o painel do Supabase → Authentication → Users → Add user e depois configure o perfil.
-          </div>
-        </div>
-      )}
-      <Field label="Nome completo" required><input className="form-input" placeholder="Nome do usuário" value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} /></Field>
-      <Field label="E-mail" required><input type="email" className="form-input" placeholder="usuario@empresa.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
-      <Field label="Senha temporária" required><input type="password" className="form-input" placeholder="Mínimo 6 caracteres" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></Field>
-      <Field label="Cargo"><input className="form-input" placeholder="Ex: Engenheiro de Segurança" value={form.job_title} onChange={e => setForm({ ...form, job_title: e.target.value })} /></Field>
-      <Field label="Perfil de acesso">
-        <select className="form-input" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
-          <option value="client_admin">Administrador do Cliente</option>
-          <option value="client_user">Usuário do Cliente</option>
-          <option value="readonly">Visualizador</option>
-        </select>
-      </Field>
-    </Modal>
-  )
-}
 
 // ── Criar Barragem ────────────────────────────────────────────
 function CreateFacilityModal({ orgId, orgName, onClose }: { orgId: string; orgName: string; onClose: () => void }) {
