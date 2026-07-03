@@ -1,37 +1,37 @@
 // src/features/dashboard/DashboardPage.tsx
+// CORRIGIDO: null safety no destructuring + nova hierarquia gistm_principles
 import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer,
-  LineChart, Line, CartesianGrid, Legend, ReferenceLine,
+  LineChart, Line, CartesianGrid, ReferenceLine,
 } from 'recharts'
-import { TrendingUp, Clock, AlertCircle, CheckCircle2, Loader2, Target } from 'lucide-react'
+import { Loader2, AlertCircle, CheckCircle2, Clock, TrendingUp } from 'lucide-react'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 import { supabase } from '@/lib/supabase'
 
 const TOPIC_COLORS = ['#1B4F72','#117A65','#7D6608','#6E2F1A','#922B21','#1A5276']
 
-// ── Gauge SVG ─────────────────────────────────────────────────
 function Gauge({ value, label, color }: { value: number; label?: string; color?: string }) {
   const r = 38, cx = 50, cy = 52
   const sa = -Math.PI * 0.75, sw = Math.PI * 1.5
-  const fs = sw * (Math.min(value, 100) / 100)
+  const v = Math.min(Math.max(value, 0), 100)
+  const fs = sw * (v / 100)
   const ea = sa + fs
   const x1 = cx + r * Math.cos(sa), y1 = cy + r * Math.sin(sa)
   const bx2 = cx + r * Math.cos(sa + sw), by2 = cy + r * Math.sin(sa + sw)
   const ex = cx + r * Math.cos(ea), ey = cy + r * Math.sin(ea)
   const lf = fs > Math.PI ? 1 : 0
-  const col = color ?? (value >= 75 ? '#059669' : value >= 50 ? '#0A9396' : value >= 25 ? '#D97706' : '#DC2626')
+  const col = color ?? (v >= 75 ? '#059669' : v >= 50 ? '#0A9396' : v >= 25 ? '#D97706' : '#DC2626')
   return (
     <svg viewBox="0 0 100 88" className="w-28 h-24 mx-auto">
       <path d={`M${x1} ${y1} A ${r} ${r} 0 1 1 ${bx2} ${by2}`} fill="none" stroke="#F3F4F6" strokeWidth="9" strokeLinecap="round" />
-      {value > 0 && <path d={`M${x1} ${y1} A ${r} ${r} 0 ${lf} 1 ${ex} ${ey}`} fill="none" stroke={col} strokeWidth="9" strokeLinecap="round" />}
-      <text x="50" y="56" textAnchor="middle" fontSize="18" fontWeight="800" fill={col} fontFamily="Inter,sans-serif">{value}%</text>
+      {v > 0 && <path d={`M${x1} ${y1} A ${r} ${r} 0 ${lf} 1 ${ex} ${ey}`} fill="none" stroke={col} strokeWidth="9" strokeLinecap="round" />}
+      <text x="50" y="56" textAnchor="middle" fontSize="18" fontWeight="800" fill={col} fontFamily="Inter,sans-serif">{v}%</text>
       {label && <text x="50" y="70" textAnchor="middle" fontSize="8" fill="#9CA3AF" fontFamily="Inter,sans-serif">{label}</text>}
     </svg>
   )
 }
 
-// ── Card de métrica ───────────────────────────────────────────
 function MetricCard({ value, label, sub, color }: { value: string | number; label: string; sub?: string; color: string }) {
   return (
     <div className="card p-4" style={{ borderTop: `3px solid ${color}` }}>
@@ -47,9 +47,8 @@ export function DashboardPage() {
   const hb = isHidrobr(profile?.role)
   const orgId = profile?.organization_id
 
-  // ── Query principal ──────────────────────────────────────────
-  const { data, isLoading } = useQuery({
-    queryKey: ['dashboard-v2', orgId],
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['dashboard-v2', orgId, hb],
     enabled: !!profile,
     queryFn: async () => {
       // Ciclo ativo
@@ -60,19 +59,39 @@ export function DashboardPage() {
         .limit(1)
       if (!hb && orgId) cycleQuery = cycleQuery.eq('organization_id', orgId)
       const { data: cycles } = await cycleQuery
-      const cycle = cycles?.[0]
+      const cycle = cycles?.[0] ?? null
 
-      if (!cycle) return { cycle: null, topicScores: [], statusDist: [], overallScore: 0, kpis: { total: 0, approved: 0, pending: 0, notStarted: 0 }, projectedScore: 0, timelineData: [], actionKpis: { total: 0, open: 0, completed: 0, totalGain: 0 } }
+      if (!cycle) {
+        return {
+          cycle: null,
+          topicScores: [],
+          statusDist: [],
+          overallScore: 0,
+          projectedScore: 0,
+          kpis: { total: 0, approved: 0, pending: 0, notStarted: 0 },
+          timelineData: [],
+          actionKpis: { total: 0, open: 0, completed: 0, totalGain: 0 },
+        }
+      }
 
-      // Tópicos e princípios
-      const { data: topics } = await supabase.from('gistm_topics').select('*').order('display_order')
-      const { data: principles } = await supabase.from('gistm_principles').select('*').order('display_order')
-      const { data: requirements } = await supabase.from('gistm_requirements').select('*')
-
-      // Respostas e avaliações
-      const { data: responses } = await supabase.from('requirement_responses')
-        .select('*, hidrobr_assessments(score_value)')
-        .eq('cycle_id', cycle.id)
+      // Busca estrutura GISTM
+      const [
+        { data: topics },
+        { data: principles },
+        { data: requirements },
+        { data: responses },
+        { data: actions },
+      ] = await Promise.all([
+        supabase.from('gistm_topics').select('*').order('display_order'),
+        supabase.from('gistm_principles').select('*').order('display_order'),
+        supabase.from('gistm_requirements').select('*'),
+        supabase.from('requirement_responses')
+          .select('*, hidrobr_assessments(score_value)')
+          .eq('cycle_id', cycle.id),
+        hb
+          ? supabase.from('action_items').select('*').order('due_date', { ascending: true })
+          : supabase.from('action_items').select('*').eq('organization_id', orgId ?? '').order('due_date', { ascending: true }),
+      ])
 
       const respMap = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
 
@@ -85,12 +104,11 @@ export function DashboardPage() {
         const scores = topicReqs
           .map((r: any) => respMap.get(r.id)?.hidrobr_assessments?.[0]?.score_value)
           .filter((v: any) => v != null)
-        const avgScore = scores.length ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0
         const approved = topicReqs.filter((r: any) => respMap.get(r.id)?.status === 'approved').length
         return {
           name: topic.code,
           fullName: topic.title,
-          avgScore,
+          avgScore: scores.length ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0,
           completionPct: topicReqs.length ? Math.round((approved / topicReqs.length) * 100) : 0,
           color: TOPIC_COLORS[i] ?? '#0A9396',
           total: topicReqs.length,
@@ -98,13 +116,13 @@ export function DashboardPage() {
         }
       })
 
-      // KPIs gerais
+      // KPIs
       const totalReqs = (requirements ?? []).length
       const approved = (responses ?? []).filter((r: any) => r.status === 'approved').length
       const pending = (responses ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length
       const notStarted = totalReqs - (responses ?? []).length + (responses ?? []).filter((r: any) => r.status === 'not_started').length
 
-      // Score global atual
+      // Score global
       const allScores = (responses ?? [])
         .flatMap((r: any) => r.hidrobr_assessments?.map((a: any) => a.score_value) ?? [])
         .filter((v: any) => v != null)
@@ -124,41 +142,26 @@ export function DashboardPage() {
           color: { not_started: '#E5E7EB', in_progress: '#3B82F6', submitted: '#D97706', approved: '#059669', needs_revision: '#DC2626' }[k] ?? '#9CA3AF',
         }))
 
-      // ── Ações e projeção ─────────────────────────────────────
-      let actionQuery = supabase.from('action_items')
-        .select('*')
-        .order('due_date', { ascending: true })
-      if (!hb && orgId) actionQuery = actionQuery.eq('organization_id', orgId)
-      const { data: actions } = await actionQuery
-
+      // Ações e projeção
       const openActions = (actions ?? []).filter((a: any) => !['completed', 'cancelled'].includes(a.status))
-      const totalGain = openActions.reduce((sum: number, a: any) => sum + (a.estimated_gain ?? 0), 0)
-      const projectedScore = Math.min(100, overallScore + totalGain)
+      const totalGain = openActions.reduce((sum: number, a: any) => sum + (Number(a.estimated_gain) || 0), 0)
+      const projectedScore = Math.min(100, Math.round(overallScore + totalGain))
 
-      // Linha do tempo: score projetado por prazo
-      const now = new Date()
-      const milestones = [
-        { label: 'Hoje', date: now, score: overallScore },
-      ]
-      // Agrupa ações por mês de prazo
+      // Linha do tempo
       const byMonth: Record<string, number> = {}
       openActions.forEach((a: any) => {
         if (!a.due_date || !a.estimated_gain) return
         const d = new Date(a.due_date)
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-        byMonth[key] = (byMonth[key] ?? 0) + (a.estimated_gain ?? 0)
+        byMonth[key] = (byMonth[key] ?? 0) + (Number(a.estimated_gain) || 0)
       })
 
       let runningScore = overallScore
-      const timelineData = [{ mes: 'Hoje', atual: overallScore, projetado: overallScore }]
+      const timelineData: any[] = [{ mes: 'Hoje', atual: overallScore, projetado: overallScore }]
       Object.entries(byMonth).sort().slice(0, 8).forEach(([key, gain]) => {
         const [year, month] = key.split('-')
         runningScore = Math.min(100, runningScore + gain)
-        timelineData.push({
-          mes: `${month}/${year.slice(2)}`,
-          atual: overallScore, // linha base
-          projetado: Math.round(runningScore),
-        })
+        timelineData.push({ mes: `${month}/${year.slice(2)}`, atual: overallScore, projetado: Math.round(runningScore) })
       })
 
       return {
@@ -166,7 +169,7 @@ export function DashboardPage() {
         topicScores,
         statusDist,
         overallScore,
-        projectedScore: Math.round(projectedScore),
+        projectedScore,
         kpis: { total: totalReqs, approved, pending, notStarted },
         timelineData,
         actionKpis: {
@@ -186,23 +189,37 @@ export function DashboardPage() {
     </div>
   )
 
-  const { cycle, topicScores, statusDist, overallScore, projectedScore, kpis, timelineData, actionKpis } = data!
+  if (error) return (
+    <div className="p-6">
+      <div className="card p-8 text-center">
+        <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+        <p className="text-gray-600 font-medium">Erro ao carregar dashboard</p>
+        <p className="text-xs text-gray-400 mt-1">{(error as any)?.message}</p>
+      </div>
+    </div>
+  )
+
+  // Segurança: data pode ser undefined na primeira renderização
+  if (!data) return null
+
+  const { cycle, topicScores, statusDist, overallScore, projectedScore, kpis, timelineData, actionKpis } = data
+  const gap = projectedScore - overallScore
 
   if (!cycle) return (
     <div className="p-6">
       <div className="card p-10 text-center">
         <AlertCircle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
         <p className="text-gray-600 font-medium">Nenhum ciclo ativo encontrado</p>
-        <p className="text-gray-400 text-sm mt-1">{hb ? 'Crie um ciclo na página de Clientes.' : 'Contate a HIDROBR para criar um ciclo.'}</p>
+        <p className="text-gray-400 text-sm mt-1">
+          {hb ? 'Crie um ciclo na página de Clientes.' : 'Contate a HIDROBR para criar um ciclo.'}
+        </p>
       </div>
     </div>
   )
 
-  const gap = projectedScore - overallScore
-
   return (
     <div className="p-6 space-y-5">
-      {/* Cabeçalho */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
@@ -213,34 +230,34 @@ export function DashboardPage() {
         </span>
       </div>
 
-      {/* KPIs de requisitos */}
+      {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
         <MetricCard value={`${overallScore}%`} label="Conformidade atual GISTM" color="#0A9396" sub="Baseado nas avaliações publicadas" />
-        <MetricCard value={kpis.approved} label={`de ${kpis.total} requisitos aprovados`} color="#059669" sub={`${Math.round((kpis.approved / Math.max(kpis.total, 1)) * 100)}% do total`} />
+        <MetricCard value={kpis.approved} label={`de ${kpis.total} requisitos aprovados`} color="#059669" sub={`${kpis.total > 0 ? Math.round((kpis.approved / kpis.total) * 100) : 0}% do total`} />
         <MetricCard value={kpis.pending} label="Aguardando avaliação HIDROBR" color="#D97706" sub={kpis.pending > 0 ? 'Ação necessária' : 'Nenhum pendente'} />
         <MetricCard value={kpis.notStarted} label="Requisitos não iniciados" color="#6B7280" sub={`de ${kpis.total} total`} />
       </div>
 
-      {/* Aderência atual vs. projetada */}
+      {/* Gauges + progresso por tópico */}
       <div className="grid grid-cols-3 gap-4">
         <div className="card p-5 text-center">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Aderência atual</div>
           <Gauge value={overallScore} label="conformidade" />
-          <div className="text-xs text-gray-400 mt-2">Baseada nos requisitos já avaliados</div>
+          <div className="text-xs text-gray-400 mt-2">Baseada nos requisitos avaliados</div>
         </div>
 
         <div className="card p-5 text-center" style={{ borderTop: '3px solid #059669' }}>
           <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-2">Aderência projetada</div>
           <Gauge value={projectedScore} label="se plano concluído" color="#059669" />
           <div className="text-xs text-emerald-600 font-semibold mt-2">
-            {gap > 0 ? `+${gap}% com conclusão do plano de ação` : 'Nenhum ganho estimado'}
+            {gap > 0 ? `+${gap}% com conclusão do plano de ação` : 'Nenhum ganho estimado cadastrado'}
           </div>
           <div className="text-[10px] text-gray-400 mt-1">{actionKpis.open} ações abertas · +{actionKpis.totalGain}% estimado</div>
         </div>
 
         <div className="card p-5">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Progresso por tópico</div>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {topicScores.map((t: any) => (
               <div key={t.name} className="flex items-center gap-2">
                 <span className="text-[10px] font-bold w-6 flex-shrink-0" style={{ color: t.color }}>{t.name}</span>
@@ -250,11 +267,12 @@ export function DashboardPage() {
                 <span className="text-[10px] font-semibold w-8 text-right" style={{ color: t.color }}>{t.completionPct}%</span>
               </div>
             ))}
+            {topicScores.length === 0 && <p className="text-xs text-gray-400 text-center py-4">Nenhum dado de avaliação ainda</p>}
           </div>
         </div>
       </div>
 
-      {/* Linha do tempo de aderência projetada */}
+      {/* Linha do tempo */}
       {timelineData.length > 1 && (
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
@@ -262,81 +280,88 @@ export function DashboardPage() {
               <h2 className="text-sm font-bold text-gray-900">Projeção de aderência ao longo do tempo</h2>
               <p className="text-xs text-gray-400 mt-0.5">Baseado nos prazos e ganhos estimados das ações abertas</p>
             </div>
-            <div className="flex items-center gap-4 text-xs">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-gray-400 inline-block" /> Aderência atual</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-emerald-500 inline-block" /> Projeção</span>
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-gray-300 inline-block border-dashed border-t" /> Atual</span>
+              <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-emerald-500 inline-block" /> Projetado</span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={190}>
             <LineChart data={timelineData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis dataKey="mes" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} unit="%" />
               <Tooltip formatter={(v: number) => [`${v}%`]} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }} />
               <ReferenceLine y={100} stroke="#E5E7EB" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="atual" stroke="#9CA3AF" strokeWidth={1.5} dot={false} strokeDasharray="4 4" name="Aderência atual" />
-              <Line type="monotone" dataKey="projetado" stroke="#059669" strokeWidth={2.5} dot={{ fill: '#059669', r: 4 }} name="Projeção" />
+              <Line type="monotone" dataKey="atual" stroke="#D1D5DB" strokeWidth={1.5} dot={false} strokeDasharray="5 3" name="Atual" />
+              <Line type="monotone" dataKey="projetado" stroke="#059669" strokeWidth={2.5} dot={{ fill: '#059669', r: 4 }} name="Projetado" />
             </LineChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {/* Score por tópico + Plano de ação */}
+      {/* Barras por tópico + Plano de ação */}
       <div className="grid grid-cols-3 gap-4">
         <div className="card col-span-2 p-5">
           <h2 className="text-sm font-bold text-gray-900 mb-4">Pontuação média por tópico GISTM</h2>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={topicScores} barSize={32} margin={{ top: 0, right: 10, bottom: 0, left: -10 }}>
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-              <Tooltip
-                formatter={(v: number) => [`${v} pts`, 'Pontuação']}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }}
-              />
-              <Bar dataKey="avgScore" radius={[6, 6, 0, 0]}>
-                {topicScores.map((t: any) => <Cell key={t.name} fill={t.color} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {topicScores.some((t: any) => t.avgScore > 0) ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={topicScores} barSize={32} margin={{ top: 0, right: 10, bottom: 0, left: -10 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v: number) => [`${v} pts`, 'Pontuação']} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }} />
+                <Bar dataKey="avgScore" radius={[6, 6, 0, 0]}>
+                  {topicScores.map((t: any) => <Cell key={t.name} fill={t.color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+              Nenhuma avaliação publicada ainda
+            </div>
+          )}
         </div>
 
         <div className="card p-5">
           <h2 className="text-sm font-bold text-gray-900 mb-4">Plano de ação</h2>
-          <div className="space-y-3">
+          <div className="space-y-0">
             {[
               { label: 'Total de ações', value: actionKpis.total, color: '#0A9396' },
               { label: 'Ações abertas', value: actionKpis.open, color: '#D97706' },
               { label: 'Concluídas', value: actionKpis.completed, color: '#059669' },
-              { label: 'Ganho estimado total', value: `+${actionKpis.totalGain}%`, color: '#059669' },
+              { label: 'Ganho total estimado', value: `+${actionKpis.totalGain}%`, color: '#059669' },
             ].map(k => (
-              <div key={k.label} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+              <div key={k.label} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
                 <span className="text-xs text-gray-500">{k.label}</span>
                 <span className="text-sm font-bold" style={{ color: k.color }}>{k.value}</span>
               </div>
             ))}
           </div>
-          <div className="mt-4 pt-3 border-t border-gray-100 bg-emerald-50 rounded-xl p-3">
-            <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1">Se plano 100% concluído</div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-emerald-600">{overallScore}% → {projectedScore}%</span>
-              <span className="text-sm font-black text-emerald-700">+{gap}%</span>
+          {gap > 0 && (
+            <div className="mt-4 bg-emerald-50 rounded-xl p-3">
+              <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1">Se plano 100% concluído</div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-600">{overallScore}% → {projectedScore}%</span>
+                <span className="text-sm font-black text-emerald-700">+{gap}%</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Tabela de status dos requisitos */}
-      <div className="card p-5">
-        <h2 className="text-sm font-bold text-gray-900 mb-4">Distribuição de status dos requisitos</h2>
-        <div className="grid grid-cols-5 gap-3">
-          {statusDist.map((d: any) => (
-            <div key={d.name} className="text-center p-3 rounded-xl" style={{ background: d.color + '15' }}>
-              <div className="text-2xl font-black" style={{ color: d.color }}>{d.value}</div>
-              <div className="text-[11px] text-gray-500 mt-1">{d.name}</div>
-            </div>
-          ))}
+      {/* Status distribution */}
+      {statusDist.length > 0 && (
+        <div className="card p-5">
+          <h2 className="text-sm font-bold text-gray-900 mb-4">Distribuição de status dos requisitos</h2>
+          <div className="grid grid-cols-5 gap-3">
+            {statusDist.map((d: any) => (
+              <div key={d.name} className="text-center p-3 rounded-xl" style={{ background: d.color + '18' }}>
+                <div className="text-2xl font-black" style={{ color: d.color }}>{d.value}</div>
+                <div className="text-[11px] text-gray-500 mt-1 leading-tight">{d.name}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
