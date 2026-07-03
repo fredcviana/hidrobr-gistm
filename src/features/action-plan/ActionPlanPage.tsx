@@ -153,6 +153,7 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
     due_date: item?.due_date ?? '',
     facility_ids: item?.facility_ids ?? [],
     principle_codes: item?.principle_codes ?? [],
+    estimated_gain: item?.estimated_gain ?? 0,
   })
   const [error, setError] = useState('')
 
@@ -167,6 +168,7 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
         due_date: form.due_date || null,
         facility_ids: form.facility_ids,
         principle_codes: form.principle_codes,
+        estimated_gain: form.estimated_gain,
         organization_id: orgId,
         updated_at: new Date().toISOString(),
       }
@@ -251,6 +253,24 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
             </label>
             <PrincipleSelector value={form.principle_codes} onChange={v => setForm({ ...form, principle_codes: v })} />
           </div>
+
+          {/* Ganho estimado */}
+          <div>
+            <label className="form-label">
+              Ganho estimado de aderência
+              <span className="text-gray-400 font-normal ml-1">(pontos % ao concluir)</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <input type="number" min="0" max="100" step="0.5" className="form-input w-28"
+                placeholder="Ex: 5"
+                value={form.estimated_gain || ''}
+                onChange={e => setForm({ ...form, estimated_gain: parseFloat(e.target.value) || 0 })} />
+              <p className="text-xs text-gray-500 flex-1">
+                Quantos pontos % de conformidade esta ação vai gerar quando concluída.
+                Ex: se os requisitos vinculados valem 5% do score total, informe <strong>5</strong>.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
@@ -329,6 +349,9 @@ function ActionCard({ action, orgId, onEdit }: { action: any; orgId: string; onE
             )}
             {(action.principle_codes?.length ?? 0) > 0 && (
               <span>📋 {action.principle_codes.join(', ')}</span>
+            )}
+            {(action.estimated_gain ?? 0) > 0 && (
+              <span className="text-emerald-600 font-semibold">📈 +{action.estimated_gain}%</span>
             )}
           </div>
         </div>
