@@ -5,6 +5,7 @@ import { Plus, Building2, ChevronRight, Loader2, X, Save, AlertCircle, Edit2 } f
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 import { CreateUserModal } from './CreateUserModal'
+import { CreateCycleModal } from './CreateCycleModal'
 
 // ── Modal genérico ────────────────────────────────────────────
 function Modal({ title, onClose, children, footer }: {
@@ -343,72 +344,7 @@ function CreateFacilityModal({ orgId, orgName, onClose }: { orgId: string; orgNa
   )
 }
 
-// ── Criar Ciclo ───────────────────────────────────────────────
-function CreateCycleModal({ orgId, orgName, onClose }: { orgId: string; orgName: string; onClose: () => void }) {
-  const qc = useQueryClient()
-  const [form, setForm] = useState({
-    facility_id: '', name: '',
-    reference_year: new Date().getFullYear().toString(),
-    start_date: new Date().toISOString().split('T')[0], target_date: ''
-  })
-  const [error, setError] = useState('')
 
-  const { data: facilities } = useQuery({
-    queryKey: ['org-facilities', orgId],
-    queryFn: async () => {
-      const { data } = await supabase.from('tailings_facilities').select('id,name').eq('organization_id', orgId).eq('is_active', true)
-      return data ?? []
-    },
-  })
-
-  const mut = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('assessment_cycles').insert({
-        organization_id: orgId, facility_id: form.facility_id, name: form.name,
-        reference_year: parseInt(form.reference_year), start_date: form.start_date,
-        target_date: form.target_date || null, status: 'active',
-      })
-      if (error) throw error
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['org-cycles', orgId] }); onClose() },
-    onError: (e: any) => setError(e.message),
-  })
-
-  return (
-    <Modal title={`Novo ciclo — ${orgName}`} onClose={onClose}
-      footer={<>
-        <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-        <button
-          style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'8px 16px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',background:'#002B3D',color:'white',border:'none',cursor:'pointer'}}
-          onClick={() => mut.mutate()} disabled={mut.isPending || !form.facility_id || !form.name}>
-          {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Criar ciclo
-        </button>
-      </>}>
-      {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-4">{error}</div>}
-      <Field label="Barragem" required>
-        <select className="form-input" value={form.facility_id} onChange={e => setForm({ ...form, facility_id: e.target.value })}>
-          <option value="">Selecione a barragem...</option>
-          {(facilities ?? []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>
-      </Field>
-      <Field label="Nome do ciclo" required>
-        <input className="form-input" placeholder="Ex: Ciclo 2025 — Barragem Norte" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-      </Field>
-      <div className="grid grid-cols-3 gap-4">
-        <Field label="Ano de referência">
-          <input type="number" className="form-input" value={form.reference_year} onChange={e => setForm({ ...form, reference_year: e.target.value })} />
-        </Field>
-        <Field label="Data de início">
-          <input type="date" className="form-input" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} />
-        </Field>
-        <Field label="Prazo alvo">
-          <input type="date" className="form-input" value={form.target_date} onChange={e => setForm({ ...form, target_date: e.target.value })} />
-        </Field>
-      </div>
-    </Modal>
-  )
-}
 
 // ── Detalhe da organização ────────────────────────────────────
 function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
