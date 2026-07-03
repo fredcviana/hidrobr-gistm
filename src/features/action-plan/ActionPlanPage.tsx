@@ -165,7 +165,7 @@ export function ActionPlanPage() {
           <h1 className="text-xl font-bold text-gray-900">Plano de Ação</h1>
           <p className="text-sm text-gray-500 mt-0.5">Ações de melhoria originadas das avaliações GISTM</p>
         </div>
-        <button className="btn-primary inline-flex items-center gap-2" onClick={() => setModal({})}>
+<button style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'8px 16px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',background:'#002B3D',color:'white',border:'none',cursor:'pointer'}} onClick={() => setModal({})}>
           <Plus className="w-4 h-4" /> Nova ação
         </button>
       </div>
