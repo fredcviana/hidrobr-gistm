@@ -5,113 +5,11 @@ import { Plus, Loader2, X, Save, UserCheck, UserX, Mail, Briefcase } from 'lucid
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import { Navigate } from 'react-router-dom'
+import { CreateHidrobrUserModal } from './CreateHidrobrUserModal'
 
 const ROLE_CONFIG: Record<string, { label: string; cls: string }> = {
   hidrobr_admin:      { label: 'Administrador',       cls: 'bg-purple-50 text-purple-700' },
   hidrobr_consultant: { label: 'Consultor',           cls: 'bg-blue-50 text-blue-700' },
-}
-
-// ── Modal de criação/edição ───────────────────────────────────
-function TeamMemberModal({ member, onClose }: { member?: any; onClose: () => void }) {
-  const qc = useQueryClient()
-  const [form, setForm] = useState({
-    full_name: member?.full_name ?? '',
-    job_title: member?.job_title ?? '',
-    phone: member?.phone ?? '',
-    role: member?.role ?? 'hidrobr_consultant',
-    email: '',
-    password: '',
-  })
-  const [error, setError] = useState('')
-
-  const updateMut = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('profiles').update({
-        full_name: form.full_name,
-        job_title: form.job_title || null,
-        phone: form.phone || null,
-        role: form.role,
-        updated_at: new Date().toISOString(),
-      }).eq('id', member.id)
-      if (error) throw error
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hidrobr-team'] }); onClose() },
-    onError: (e: any) => setError(e.message),
-  })
-
-  const isEditing = !!member
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-base font-bold text-gray-900">
-            {isEditing ? `Editar — ${member.full_name}` : 'Novo membro da equipe HIDROBR'}
-          </h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
-          )}
-
-          {!isEditing && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-              <strong>Para criar um novo usuário HIDROBR:</strong>
-              <ol className="mt-2 space-y-1 text-xs list-decimal list-inside">
-                <li>Acesse o Supabase → Authentication → Users → Add user</li>
-                <li>Crie o usuário com e-mail e senha</li>
-                <li>Volte aqui e edite o perfil para definir o cargo e role</li>
-              </ol>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="form-label">Nome completo *</label>
-              <input className="form-input" placeholder="Dr. Ricardo Mendes"
-                value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} />
-            </div>
-            <div>
-              <label className="form-label">Cargo</label>
-              <input className="form-input" placeholder="Consultor Sênior"
-                value={form.job_title} onChange={e => setForm({ ...form, job_title: e.target.value })} />
-            </div>
-            <div>
-              <label className="form-label">Telefone</label>
-              <input className="form-input" placeholder="+55 31 99999-0000"
-                value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
-            </div>
-            <div className="col-span-2">
-              <label className="form-label">Perfil de acesso</label>
-              <select className="form-input" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
-                <option value="hidrobr_consultant">Consultor HIDROBR</option>
-                <option value="hidrobr_admin">Administrador HIDROBR</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-          {isEditing && (
-            <button
-              style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'8px 16px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',background:'#002B3D',color:'white',border:'none',cursor:'pointer'}}
-              onClick={() => updateMut.mutate()}
-              disabled={updateMut.isPending || !form.full_name}
-            >
-              {updateMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Salvar alterações
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // ── Painel de clientes atribuídos ─────────────────────────────
@@ -380,7 +278,7 @@ export function HidrobrTeamPage() {
         </div>
       )}
 
-      {showCreate && <TeamMemberModal onClose={() => setShowCreate(false)} />}
+      {showCreate && <CreateHidrobrUserModal onClose={() => setShowCreate(false)} />}
     </div>
   )
 }
