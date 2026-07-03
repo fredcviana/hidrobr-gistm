@@ -46,7 +46,7 @@ export function AppLayout() {
           </div>
           <div>
             <div className="text-[13px] font-bold text-white leading-none">HIDROBR</div>
-            <div className="text-[10px] text-white/35 uppercase tracking-widest">GISTM Manager</div>
+            <div className="text-[10px] text-white/35 uppercase tracking-widest">Sustainability Manager</div>
           </div>
         </div>
 
