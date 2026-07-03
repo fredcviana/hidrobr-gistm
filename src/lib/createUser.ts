@@ -17,7 +17,7 @@ export async function createUser(params: CreateUserParams): Promise<{ success: b
   if (!session) return { success: false, error: 'Não autenticado' }
 
   const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/Create-User`, 
     {
       method: 'POST',
       headers: {
