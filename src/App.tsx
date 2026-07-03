@@ -13,6 +13,7 @@ import { AcademyPage } from '@/features/academy/AcademyPage'
 import { ClientsPage } from '@/features/clients/ClientsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { StandardsSettingsPage } from '@/features/settings/StandardsSettingsPage'
+import { HidrobrTeamPage } from '@/features/team/HidrobrTeamPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
@@ -33,11 +34,7 @@ export default function App() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
         setProfile(profile)
       } else {
         setProfile(null)
@@ -61,7 +58,7 @@ export default function App() {
           <Route path="clients" element={<ClientsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="standards-settings" element={<StandardsSettingsPage />} />
-          {/* Rota antiga mantida para compatibilidade */}
+          <Route path="hidrobr-team" element={<HidrobrTeamPage />} />
           <Route path="gistm-settings" element={<Navigate to="/standards-settings" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
