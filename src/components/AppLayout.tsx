@@ -17,7 +17,7 @@ const NAV = [
   },
   {
     section: 'Capacitação', items: [
-      { to: '/academy', label: 'GISTM Academy', icon: GraduationCap },
+      { to: '/academy', label: 'HBR Academy', icon: GraduationCap },
     ]
   },
   {
