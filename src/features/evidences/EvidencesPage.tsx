@@ -189,7 +189,7 @@ export function EvidencesPage() {
               <div className="flex gap-2">
                 <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.mp4" onChange={handleUpload} />
                 <button
-                  className="btn-primary w-full justify-center inline-flex items-center gap-2"
+                  style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:'8px',width:'100%',padding:'8px 16px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',background:'#002B3D',color:'white',border:'none',cursor:'pointer'}}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading || !selectedResponse}
                 >
