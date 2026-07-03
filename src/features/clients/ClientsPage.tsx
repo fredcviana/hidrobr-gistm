@@ -410,7 +410,7 @@ export function ClientsPage() {
           <h1 className="text-xl font-bold text-gray-900">Portfólio de Clientes</h1>
           <p className="text-sm text-gray-500 mt-0.5">{orgs?.length ?? 0} organização{orgs?.length !== 1 ? 'ões' : ''} ativa{orgs?.length !== 1 ? 's' : ''}</p>
         </div>
-        {hb && <button className="btn-primary inline-flex items-center gap-2" onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> Nova organização</button>}
+        {hb && <button style={{display:'inline-flex',alignItems:'center',gap:'8px',padding:'8px 16px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',background:'#002B3D',color:'white',border:'none',cursor:'pointer'}} onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> Nova organização</button>}
       </div>
 
       {isLoading ? (
