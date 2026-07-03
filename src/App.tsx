@@ -12,7 +12,7 @@ import { ActionPlanPage } from '@/features/action-plan/ActionPlanPage'
 import { AcademyPage } from '@/features/academy/AcademyPage'
 import { ClientsPage } from '@/features/clients/ClientsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
-import { GistmSettingsPage } from '@/features/settings/GistmSettingsPage'
+import { StandardsSettingsPage } from '@/features/settings/StandardsSettingsPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
@@ -60,7 +60,9 @@ export default function App() {
           <Route path="academy" element={<AcademyPage />} />
           <Route path="clients" element={<ClientsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="gistm-settings" element={<GistmSettingsPage />} />
+          <Route path="standards-settings" element={<StandardsSettingsPage />} />
+          {/* Rota antiga mantida para compatibilidade */}
+          <Route path="gistm-settings" element={<Navigate to="/standards-settings" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
