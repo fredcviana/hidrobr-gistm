@@ -77,7 +77,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
     setSaving(true); setErrMsg(''); setSuccessMsg('')
     try {
       await ensureResponse(newStatus)
-      await qc.invalidateQueries({ queryKey: ['requirements-v3', cycleId] })
+      await qc.invalidateQueries({ queryKey: ['requirements-v3'] })
       onClose()
     } catch (e: any) {
       setErrMsg(e.message ?? 'Erro ao salvar')
