@@ -45,8 +45,12 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
   const [errMsg, setErrMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
 
-  const hasAssessment = (response?.hidrobr_assessments?.length ?? 0) > 0
-  const assessment = response?.hidrobr_assessments?.[0]
+  // Estado local da avaliação — atualiza após salvar sem depender da prop stale
+  const [localAssessment, setLocalAssessment] = useState<any>(
+    (response?.hidrobr_assessments?.length ?? 0) > 0 ? response.hidrobr_assessments[0] : null
+  )
+  const hasAssessment = localAssessment !== null
+  const assessment = localAssessment
   const currentStatus = response?.status ?? 'not_started'
 
   async function ensureResponse(newStatus?: string): Promise<string> {
@@ -136,7 +140,14 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
         throw new Error(`Erro ao salvar avaliação: ${assessError.message}`)
       }
 
-      // Sucesso
+      // Sucesso — atualiza estado local para mostrar avaliação no modal
+      setLocalAssessment({
+        score,
+        score_value: scoreValue,
+        assessment_text: assessText.trim(),
+        recommendations: recommendations.trim() || null,
+        published_at: new Date().toISOString(),
+      })
       await qc.invalidateQueries({ queryKey: ['requirements-v3'] })
       onClose()
     } catch (e: any) {
