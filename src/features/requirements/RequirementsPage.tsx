@@ -120,7 +120,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
       const scoreValue = SCORE_OPTIONS.find(s => s.key === score)?.value ?? 0
       const { error: assessError } = await supabase
         .from('hidrobr_assessments')
-        .insert({
+        .upsert({
           response_id: response.id,
           assessed_by: profile!.id,
           score: score,
@@ -128,7 +128,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
           assessment_text: assessText.trim(),
           recommendations: recommendations.trim() || null,
           published_at: new Date().toISOString(),
-        })
+        }, { onConflict: 'response_id' })
 
       if (assessError) {
         // Se falhou ao inserir, reverte o status
@@ -137,7 +137,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
       }
 
       // Sucesso
-      await qc.invalidateQueries({ queryKey: ['requirements-v3', cycleId] })
+      await qc.invalidateQueries({ queryKey: ['requirements-v3'] })
       onClose()
     } catch (e: any) {
       setErrMsg(e.message ?? 'Erro desconhecido ao publicar avaliação')
