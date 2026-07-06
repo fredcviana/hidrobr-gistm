@@ -109,11 +109,14 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
 
     setAssessing(true)
     try {
-      // Passo 1: atualiza status da resposta para 'approved'
+      // Passo 1: status baseado na classificação
+      // fully_conforming / conforming → approved
+      // partially_conforming / non_conforming → needs_revision
+      const newStatus = ['fully_conforming', 'conforming'].includes(score) ? 'approved' : 'needs_revision'
       const { error: statusError } = await supabase
         .from('requirement_responses')
         .update({
-          status: 'approved',
+          status: newStatus,
           updated_at: new Date().toISOString(),
         })
         .eq('id', response.id)
@@ -136,7 +139,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
 
       if (assessError) {
         // Se falhou ao inserir, reverte o status
-        await supabase.from('requirement_responses').update({ status: 'submitted' }).eq('id', response.id)
+        await supabase.from('requirement_responses').update({ status: response.status ?? 'submitted' }).eq('id', response.id)
         throw new Error(`Erro ao salvar avaliação: ${assessError.message}`)
       }
 

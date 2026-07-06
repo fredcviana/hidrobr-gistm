@@ -93,14 +93,21 @@ export function DashboardPage() {
         const topicReqs = (requirements ?? []).filter((r: any) =>
           topicPrinciples.some((p: any) => p.id === r.principle_id)
         )
-        const scores = topicReqs
-          .map((r: any) => respMap.get(r.id)?.hidrobr_assessments?.[0]?.score_value)
-          .filter((v: any) => v != null)
+        // Score ponderado pelo peso de cada requisito
+        let weightedSum = 0, totalWeight = 0
+        topicReqs.forEach((r: any) => {
+          const sv = respMap.get(r.id)?.hidrobr_assessments?.[0]?.score_value
+          if (sv != null) {
+            const w = Number(r.weight) || 1
+            weightedSum += sv * w
+            totalWeight += w
+          }
+        })
         const approved = topicReqs.filter((r: any) => respMap.get(r.id)?.status === 'approved').length
         return {
           name: topic.code,
           fullName: topic.title,
-          avgScore: scores.length ? Math.round(scores.reduce((a: number, b: number) => a + b, 0) / scores.length) : 0,
+          avgScore: totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0,
           completionPct: topicReqs.length ? Math.round((approved / topicReqs.length) * 100) : 0,
           color: TOPIC_COLORS[i] ?? '#0A9396',
           total: topicReqs.length,
@@ -114,12 +121,19 @@ export function DashboardPage() {
       const pending = (responses ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length
       const notStarted = totalReqs - (responses ?? []).length + (responses ?? []).filter((r: any) => r.status === 'not_started').length
 
-      // Score global
-      const allScores = (responses ?? [])
-        .flatMap((r: any) => r.hidrobr_assessments?.map((a: any) => a.score_value) ?? [])
-        .filter((v: any) => v != null)
-      const overallScore = allScores.length
-        ? Math.round(allScores.reduce((a: number, b: number) => a + b, 0) / allScores.length)
+      // Score global ponderado pelo peso de cada requisito
+      const reqWeightMap = new Map((requirements ?? []).map((r: any) => [r.id, Number(r.weight) || 1]))
+      let globalWeightedSum = 0, globalTotalWeight = 0
+      ;(responses ?? []).forEach((r: any) => {
+        const sv = r.hidrobr_assessments?.[0]?.score_value
+        if (sv != null) {
+          const w = reqWeightMap.get(r.requirement_id) ?? 1
+          globalWeightedSum += sv * w
+          globalTotalWeight += w
+        }
+      })
+      const overallScore = globalTotalWeight > 0
+        ? Math.round(globalWeightedSum / globalTotalWeight)
         : 0
 
       // Status distribution
