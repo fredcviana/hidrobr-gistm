@@ -102,14 +102,15 @@ export function DashboardPage() {
         const topicReqs = (requirements ?? []).filter((r: any) =>
           topicPrinciples.some((p: any) => p.id === r.principle_id)
         )
-        // Score ponderado pelo peso de cada requisito
+        // Score ponderado: todos os requisitos no denominador, avaliados no numerador
         let weightedSum = 0, totalWeight = 0
         topicReqs.forEach((r: any) => {
-          const sv = respMap.get(r.id)?.assessment?.score_value
-          if (sv != null) {
-            const w = Number(r.weight) || 1
-            weightedSum += sv * w
-            totalWeight += w
+          const w = Number(r.weight) || 1
+          totalWeight += w
+          const resp = respMap.get(r.id)
+          if (resp) {
+            const sv = assessMap.get(resp.id)?.score_value
+            if (sv != null) weightedSum += sv * w
           }
         })
         const approved = topicReqs.filter((r: any) => respMap.get(r.id)?.status === 'approved').length
@@ -130,16 +131,23 @@ export function DashboardPage() {
       const pending = (responses ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length
       const notStarted = totalReqs - (responses ?? []).length + (responses ?? []).filter((r: any) => r.status === 'not_started').length
 
-      // Score global ponderado pelo peso de cada requisito
+      // Score global: considera TODOS os requisitos no denominador
+      // Requisitos sem avaliação contam como 0 pontos
       const reqWeightMap = new Map((requirements ?? []).map((r: any) => [r.id, Number(r.weight) || 1]))
+      const respByReqId = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
       let globalWeightedSum = 0, globalTotalWeight = 0
-      ;(responses ?? []).forEach((r: any) => {
-        const sv = assessMap.get(r.id)?.score_value
-        if (sv != null) {
-          const w = reqWeightMap.get(r.requirement_id) ?? 1
-          globalWeightedSum += sv * w
-          globalTotalWeight += w
+      ;(requirements ?? []).forEach((req: any) => {
+        const w = Number(req.weight) || 1
+        globalTotalWeight += w
+        const resp = respByReqId.get(req.id)
+        if (resp) {
+          const sv = assessMap.get(resp.id)?.score_value
+          if (sv != null) {
+            globalWeightedSum += sv * w
+          }
+          // se tem resposta mas sem avaliação, conta 0 (já está no denominador)
         }
+        // sem resposta = 0 pontos (já está no denominador)
       })
       const overallScore = globalTotalWeight > 0
         ? Math.round(globalWeightedSum / globalTotalWeight)
