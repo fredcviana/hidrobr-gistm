@@ -88,11 +88,9 @@ export function DashboardPage() {
         supabase.from('requirement_responses')
           .select('*, hidrobr_assessments(score_value)')
           .eq('cycle_id', cycle.id),
-       hb
+        hb
           ? supabase.from('action_items').select('*').order('due_date', { ascending: true })
-          : orgId
-            ? supabase.from('action_items').select('*').eq('organization_id', orgId).order('due_date', { ascending: true })
-            : supabase.from('action_items').select('*').eq('organization_id', 'none').order('due_date', { ascending: true }),
+          : supabase.from('action_items').select('*').eq('organization_id', orgId || '00000000-0000-0000-0000-000000000000').order('due_date', { ascending: true }),
       ])
 
       const respMap = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
@@ -145,7 +143,8 @@ export function DashboardPage() {
         }))
 
       // Ações e projeção
-      const openActions = (actions ?? []).filter((a: any) => !['completed', 'cancelled'].includes(a.status))
+      const actionsArr = Array.isArray(actions) ? actions : []
+      const openActions = actionsArr.filter((a: any) => !['completed', 'cancelled'].includes(a.status))
       const totalGain = openActions.reduce((sum: number, a: any) => sum + (Number(a.estimated_gain) || 0), 0)
       const projectedScore = Math.min(100, Math.round(overallScore + totalGain))
 
@@ -175,9 +174,9 @@ export function DashboardPage() {
         kpis: { total: totalReqs, approved, pending, notStarted },
         timelineData,
         actionKpis: {
-          total: (actions ?? []).length,
+          total: actionsArr.length,
           open: openActions.length,
-          completed: (actions ?? []).filter((a: any) => a.status === 'completed').length,
+          completed: actionsArr.filter((a: any) => a.status === 'completed').length,
           totalGain: Math.round(totalGain),
         },
       }

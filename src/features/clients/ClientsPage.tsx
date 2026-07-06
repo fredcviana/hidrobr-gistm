@@ -356,6 +356,24 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
   const [modal, setModal] = useState<'user' | 'facility' | 'cycle' | null>(null)
   const [editingFacility, setEditingFacility] = useState<any>(null)
 
+  const deleteCycleMut = useMutation({
+    mutationFn: async (cycleId: string) => {
+      const { data: responses } = await supabase.from('requirement_responses').select('id').eq('cycle_id', cycleId)
+      if (responses?.length) {
+        const ids = responses.map((r: any) => r.id)
+        await supabase.from('hidrobr_assessments').delete().in('response_id', ids)
+        await supabase.from('evidences').delete().in('response_id', ids)
+        await supabase.from('comments').delete().in('response_id', ids)
+        await supabase.from('requirement_responses').delete().eq('cycle_id', cycleId)
+      }
+      const { error } = await supabase.from('assessment_cycles').delete().eq('id', cycleId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['org-cycles', org.id] }),
+    onError: (e: any) => alert('Erro ao excluir ciclo: ' + e.message),
+  })
+
+
   const { data: users } = useQuery({
     queryKey: ['org-users', org.id],
     queryFn: async () => {
@@ -546,6 +564,18 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
                   {c.status === 'active' ? 'Ativo' : c.status}
                 </span>
               </div>
+              {isAdmin && (
+                <button
+                  className="text-xs text-red-400 hover:text-red-600 border border-red-200 hover:bg-red-50 px-2.5 py-1.5 rounded-lg transition-colors flex-shrink-0"
+                  disabled={deleteCycleMut.isPending}
+                  onClick={() => {
+                    if (confirm('Excluir "' + c.name + '"?\n\nAtenção: isto apagará TODAS as respostas e avaliações associadas. Esta ação não pode ser desfeita.')) {
+                      deleteCycleMut.mutate(c.id)
+                    }
+                  }}>
+                  🗑️ Excluir
+                </button>
+              )}
             </div>
           ))}
         </div>
