@@ -520,9 +520,9 @@ export function RequirementsPage() {
         supabase.from('gistm_topics').select('*').order('display_order'),
         supabase.from('gistm_principles').select('*').order('display_order'),
         supabase.from('gistm_requirements').select('*').order('display_order'),
-        supabase.from('requirement_responses')
-          .select('*, hidrobr_assessments(score,score_value,assessment_text,recommendations)')
-          .eq('cycle_id', cycleId),
+      supabase.from('requirement_responses')
+  .select('*, hidrobr_assessments(id,score,score_value,assessment_text,recommendations,published_at)')
+  .eq('cycle_id', cycleId),
       ])
       return { topics: topics ?? [], principles: principles ?? [], requirements: requirements ?? [], responses: responses ?? [] }
     },
