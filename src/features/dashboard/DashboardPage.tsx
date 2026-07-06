@@ -1,16 +1,24 @@
 // src/features/dashboard/DashboardPage.tsx
-// CORRIGIDO: null safety no destructuring + nova hierarquia gistm_principles
 import { useQuery } from '@tanstack/react-query'
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer,
-  LineChart, Line, CartesianGrid, ReferenceLine,
-} from 'recharts'
-import { Loader2, AlertCircle, CheckCircle2, Clock, TrendingUp } from 'lucide-react'
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Legend } from 'recharts'
+import { Loader2, AlertCircle } from 'lucide-react'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 import { supabase } from '@/lib/supabase'
 
-const TOPIC_COLORS = ['#1B4F72','#117A65','#7D6608','#6E2F1A','#922B21','#1A5276']
+const TOPIC_COLORS: Record<string, string> = {
+  T1: '#1B4F72', T2: '#117A65', T3: '#7D6608',
+  T4: '#6E2F1A', T5: '#922B21', T6: '#1A5276',
+}
 
+function getBarColor(pct: number) {
+  if (pct >= 75) return '#059669'
+  if (pct >= 50) return '#2a78d6'
+  if (pct >= 25) return '#D97706'
+  if (pct > 0)   return '#e34948'
+  return '#D1D5DB'
+}
+
+// ── Gauge ─────────────────────────────────────────────────────
 function Gauge({ value, label, color }: { value: number; label?: string; color?: string }) {
   const r = 38, cx = 50, cy = 52
   const sa = -Math.PI * 0.75, sw = Math.PI * 1.5
@@ -21,7 +29,7 @@ function Gauge({ value, label, color }: { value: number; label?: string; color?:
   const bx2 = cx + r * Math.cos(sa + sw), by2 = cy + r * Math.sin(sa + sw)
   const ex = cx + r * Math.cos(ea), ey = cy + r * Math.sin(ea)
   const lf = fs > Math.PI ? 1 : 0
-  const col = color ?? (v >= 75 ? '#059669' : v >= 50 ? '#0A9396' : v >= 25 ? '#D97706' : '#DC2626')
+  const col = color ?? getBarColor(v)
   return (
     <svg viewBox="0 0 100 88" className="w-28 h-24 mx-auto">
       <path d={`M${x1} ${y1} A ${r} ${r} 0 1 1 ${bx2} ${by2}`} fill="none" stroke="#F3F4F6" strokeWidth="9" strokeLinecap="round" />
@@ -42,13 +50,157 @@ function MetricCard({ value, label, sub, color }: { value: string | number; labe
   )
 }
 
+// ── Gráfico de barras por princípio ───────────────────────────
+function PrincipleAdherenceChart({ principleScores }: { principleScores: any[] }) {
+  if (principleScores.length === 0) return (
+    <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+      Nenhuma avaliação publicada ainda
+    </div>
+  )
+  return (
+    <div className="space-y-0">
+      {principleScores.map((p: any) => {
+        const barColor = getBarColor(p.atual)
+        const proj = Math.min(100, p.atual + p.gain)
+        const hasGain = p.gain > 0
+        return (
+          <div key={p.code} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
+            {/* Código */}
+            <div className="w-8 flex-shrink-0">
+              <span className="text-[10px] font-bold text-gray-400">{p.code}</span>
+            </div>
+            {/* Barra */}
+            <div className="flex-1 relative h-6 bg-gray-100 rounded-md overflow-hidden">
+              {/* Barra atual */}
+              <div
+                className="absolute left-0 top-0 h-full rounded-md transition-all"
+                style={{
+                  width: `${p.atual}%`,
+                  background: barColor,
+                  borderRadius: hasGain && p.atual > 0 ? '6px 0 0 6px' : '6px',
+                  opacity: p.atual === 0 ? 0 : 1,
+                }}
+              />
+              {/* Ganho projetado */}
+              {hasGain && (
+                <div
+                  className="absolute top-0 h-full"
+                  style={{
+                    left: `${p.atual}%`,
+                    width: `${p.gain}%`,
+                    background: barColor,
+                    opacity: 0.3,
+                    borderRadius: '0 6px 6px 0',
+                  }}
+                />
+              )}
+              {/* Label dentro da barra */}
+              {p.atual >= 15 && (
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-white">
+                  {p.atual}%
+                </span>
+              )}
+            </div>
+            {/* Valores à direita */}
+            <div className="flex items-center gap-1.5 w-20 flex-shrink-0">
+              {p.atual < 15 && (
+                <span className="text-[11px] font-semibold" style={{ color: p.atual === 0 ? '#9CA3AF' : barColor }}>
+                  {p.atual}%
+                </span>
+              )}
+              {hasGain && (
+                <span className="text-[10px] text-emerald-600 font-semibold">
+                  →{proj}%
+                </span>
+              )}
+            </div>
+          </div>
+        )
+      })}
+
+      {/* Legenda de cores */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 pt-3 mt-1">
+        {[
+          { color: '#059669', label: '≥75% Conforme' },
+          { color: '#2a78d6', label: '50–74% Progresso' },
+          { color: '#D97706', label: '25–49% Atenção' },
+          { color: '#e34948', label: '1–24% Crítico' },
+          { color: '#D1D5DB', label: '0% Não iniciado' },
+        ].map(l => (
+          <span key={l.label} className="flex items-center gap-1.5 text-[10px] text-gray-400">
+            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: l.color }} />
+            {l.label}
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5 text-[10px] text-gray-400 ml-2">
+          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0 bg-emerald-400 opacity-40" />
+          Ganho projetado
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ── Gráfico de linha temporal ─────────────────────────────────
+function AdherenceTimelineChart({ timelineData, overallScore }: { timelineData: any[]; overallScore: number }) {
+  if (timelineData.length < 2) return (
+    <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+      Dados insuficientes para gerar linha do tempo
+    </div>
+  )
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-3 py-2.5 text-xs">
+        <div className="font-semibold text-gray-700 mb-1.5">{label}</div>
+        {payload.map((p: any) => (
+          <div key={p.name} className="flex items-center gap-2 mb-0.5">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
+            <span className="text-gray-500">{p.name}:</span>
+            <span className="font-bold" style={{ color: p.color }}>{p.value}%</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={timelineData} margin={{ top: 10, right: 24, bottom: 0, left: -10 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+        <XAxis dataKey="data" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+        <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} unit="%" />
+        <Tooltip content={<CustomTooltip />} />
+        <ReferenceLine y={overallScore} stroke="#E5E7EB" strokeDasharray="4 4" />
+        <Line
+          type="monotone" dataKey="aderencia"
+          stroke="#2a78d6" strokeWidth={2.5}
+          dot={{ fill: '#2a78d6', r: 4, strokeWidth: 0 }}
+          name="Aderência real"
+          connectNulls
+        />
+        <Line
+          type="monotone" dataKey="projetado"
+          stroke="#059669" strokeWidth={2}
+          strokeDasharray="5 3"
+          dot={{ fill: '#059669', r: 3, strokeWidth: 0 }}
+          name="Projeção"
+          connectNulls
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
+// ── Página principal ──────────────────────────────────────────
 export function DashboardPage() {
   const { profile } = useAuthStore()
   const hb = isHidrobr(profile?.role)
   const orgId = profile?.organization_id
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard-v2', orgId, hb],
+    queryKey: ['dashboard-v3', orgId, hb],
     enabled: !!profile,
     queryFn: async () => {
       // Ciclo ativo
@@ -61,80 +213,31 @@ export function DashboardPage() {
       const { data: cycles } = await cycleQuery
       const cycle = cycles?.[0] ?? null
 
-      if (!cycle) {
-        return {
-          cycle: null,
-          topicScores: [],
-          statusDist: [],
-          overallScore: 0,
-          projectedScore: 0,
-          kpis: { total: 0, approved: 0, pending: 0, notStarted: 0 },
-          timelineData: [],
-          actionKpis: { total: 0, open: 0, completed: 0, totalGain: 0 },
-        }
+      if (!cycle) return {
+        cycle: null, overallScore: 0, projectedScore: 0,
+        kpis: { total: 0, approved: 0, pending: 0, notStarted: 0 },
+        principleScores: [], timelineData: [], actionKpis: { total: 0, open: 0, completed: 0, totalGain: 0 },
+        topicProgressData: [],
       }
 
-      // Busca estrutura GISTM
+      // Busca tudo separadamente
       const { data: topics } = await supabase.from('gistm_topics').select('*').order('display_order')
       const { data: principles } = await supabase.from('gistm_principles').select('*').order('display_order')
       const { data: requirements } = await supabase.from('gistm_requirements').select('*')
-      const { data: responses } = await supabase.from('requirement_responses')
-        .select('*')
-        .eq('cycle_id', cycle.id)
-      // Busca avaliações separadamente (mais confiável que join aninhado)
+      const { data: responses } = await supabase.from('requirement_responses').select('*').eq('cycle_id', cycle.id)
       const { data: assessments } = await supabase.from('hidrobr_assessments')
-        .select('response_id, score, score_value')
+        .select('response_id, score, score_value, published_at')
         .in('response_id', (responses ?? []).map((r: any) => r.id))
-      const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
       let actionsQuery = supabase.from('action_items').select('*').order('due_date', { ascending: true })
       if (!hb && orgId) actionsQuery = actionsQuery.eq('organization_id', orgId)
       const { data: actionsRaw } = await actionsQuery
 
-      // Combina respostas com avaliações
-      const respMap = new Map((responses ?? []).map((r: any) => [
-        r.requirement_id,
-        { ...r, assessment: assessMap.get(r.id) ?? null }
-      ]))
-
-      // Score por tópico
-      const topicScores = (topics ?? []).map((topic: any, i: number) => {
-        const topicPrinciples = (principles ?? []).filter((p: any) => p.topic_id === topic.id)
-        const topicReqs = (requirements ?? []).filter((r: any) =>
-          topicPrinciples.some((p: any) => p.id === r.principle_id)
-        )
-        // Score ponderado: todos os requisitos no denominador, avaliados no numerador
-        let weightedSum = 0, totalWeight = 0
-        topicReqs.forEach((r: any) => {
-          const w = Number(r.weight) || 1
-          totalWeight += w
-          const resp = respMap.get(r.id)
-          if (resp) {
-            const sv = assessMap.get(resp.id)?.score_value
-            if (sv != null) weightedSum += sv * w
-          }
-        })
-        const approved = topicReqs.filter((r: any) => respMap.get(r.id)?.status === 'approved').length
-        return {
-          name: topic.code,
-          fullName: topic.title,
-          avgScore: totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0,
-          completionPct: topicReqs.length ? Math.round((approved / topicReqs.length) * 100) : 0,
-          color: TOPIC_COLORS[i] ?? '#0A9396',
-          total: topicReqs.length,
-          approved,
-        }
-      })
-
-      // KPIs
-      const totalReqs = (requirements ?? []).length
-      const approved = (responses ?? []).filter((r: any) => r.status === 'approved').length
-      const pending = (responses ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length
-      const notStarted = totalReqs - (responses ?? []).length + (responses ?? []).filter((r: any) => r.status === 'not_started').length
-
-      // Score global: considera TODOS os requisitos no denominador
-      // Requisitos sem avaliação contam como 0 pontos
-      const reqWeightMap = new Map((requirements ?? []).map((r: any) => [r.id, Number(r.weight) || 1]))
+      const actionsArr = Array.isArray(actionsRaw) ? actionsRaw : []
+      const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
       const respByReqId = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
+      const reqWeightMap = new Map((requirements ?? []).map((r: any) => [r.id, Number(r.weight) || 1]))
+
+      // Score global — todos os 77 requisitos no denominador
       let globalWeightedSum = 0, globalTotalWeight = 0
       ;(requirements ?? []).forEach((req: any) => {
         const w = Number(req.weight) || 1
@@ -142,60 +245,155 @@ export function DashboardPage() {
         const resp = respByReqId.get(req.id)
         if (resp) {
           const sv = assessMap.get(resp.id)?.score_value
-          if (sv != null) {
-            globalWeightedSum += sv * w
-          }
-          // se tem resposta mas sem avaliação, conta 0 (já está no denominador)
+          if (sv != null) globalWeightedSum += sv * w
         }
-        // sem resposta = 0 pontos (já está no denominador)
       })
-      const overallScore = globalTotalWeight > 0
-        ? Math.round(globalWeightedSum / globalTotalWeight)
-        : 0
+      const overallScore = globalTotalWeight > 0 ? Math.round(globalWeightedSum / globalTotalWeight) : 0
 
-      // Status distribution
-      const statusCount: Record<string, number> = { not_started: 0, in_progress: 0, submitted: 0, approved: 0, needs_revision: 0 }
-      ;(responses ?? []).forEach((r: any) => { statusCount[r.status] = (statusCount[r.status] ?? 0) + 1 })
-      statusCount.not_started += totalReqs - (responses ?? []).length
-      const statusDist = Object.entries(statusCount)
-        .filter(([, v]) => v > 0)
-        .map(([k, v]) => ({
-          name: { not_started: 'Não iniciado', in_progress: 'Em andamento', submitted: 'Ag. avaliação', approved: 'Aprovado', needs_revision: 'Revisar' }[k] ?? k,
-          value: v,
-          color: { not_started: '#E5E7EB', in_progress: '#3B82F6', submitted: '#D97706', approved: '#059669', needs_revision: '#DC2626' }[k] ?? '#9CA3AF',
-        }))
+      // KPIs
+      const totalReqs = (requirements ?? []).length
+      const approved = (responses ?? []).filter((r: any) => r.status === 'approved').length
+      const pending = (responses ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length
+      const notStarted = totalReqs - (responses ?? []).length + (responses ?? []).filter((r: any) => r.status === 'not_started').length
 
-      // Ações e projeção
-      const actionsArr = Array.isArray(actionsRaw) ? actionsRaw : []
+      // Ações
       const openActions = actionsArr.filter((a: any) => !['completed', 'cancelled'].includes(a.status))
-      const totalGain = openActions.reduce((sum: number, a: any) => sum + (Number(a.estimated_gain) || 0), 0)
+      const totalGain = openActions.reduce((s: number, a: any) => s + (Number(a.estimated_gain) || 0), 0)
       const projectedScore = Math.min(100, Math.round(overallScore + totalGain))
 
-      // Linha do tempo
-      const byMonth: Record<string, number> = {}
-      openActions.forEach((a: any) => {
-        if (!a.due_date || !a.estimated_gain) return
-        const d = new Date(a.due_date)
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-        byMonth[key] = (byMonth[key] ?? 0) + (Number(a.estimated_gain) || 0)
+      // ── Score por princípio ────────────────────────────────
+      const principleScores = (principles ?? []).map((p: any) => {
+        const pReqs = (requirements ?? []).filter((r: any) => r.principle_id === p.id)
+        let wSum = 0, wTotal = 0
+        pReqs.forEach((req: any) => {
+          const w = Number(req.weight) || 1
+          wTotal += w
+          const resp = respByReqId.get(req.id)
+          if (resp) {
+            const sv = assessMap.get(resp.id)?.score_value
+            if (sv != null) wSum += sv * w
+          }
+        })
+        const atual = wTotal > 0 ? Math.round(wSum / wTotal) : 0
+
+        // Ganho projetado: soma estimated_gain das ações abertas vinculadas a este princípio
+        const gain = openActions
+          .filter((a: any) => (a.principle_codes ?? []).includes(p.code))
+          .reduce((s: number, a: any) => s + (Number(a.estimated_gain) || 0), 0)
+
+        const topic = (topics ?? []).find((t: any) => t.id === p.topic_id)
+        return { code: p.code, number: p.number, atual, gain: Math.round(gain), topicCode: topic?.code ?? 'T1', topicColor: TOPIC_COLORS[topic?.code ?? 'T1'] ?? '#0A9396' }
       })
 
-      let runningScore = overallScore
-      const timelineData: any[] = [{ mes: 'Hoje', atual: overallScore, projetado: overallScore }]
-      Object.entries(byMonth).sort().slice(0, 8).forEach(([key, gain]) => {
-        const [year, month] = key.split('-')
-        runningScore = Math.min(100, runningScore + gain)
-        timelineData.push({ mes: `${month}/${year.slice(2)}`, atual: overallScore, projetado: Math.round(runningScore) })
+      // ── Linha do tempo ─────────────────────────────────────
+      // Pontos reais: cada avaliação publicada acumula score no tempo
+      type TimeEvent = { date: string; type: 'assessment' | 'action'; gain: number }
+      const events: TimeEvent[] = []
+
+      // Avaliações: cada uma representa a mudança no score quando foi publicada
+      ;(assessments ?? []).forEach((a: any) => {
+        if (a.published_at) {
+          events.push({ date: a.published_at.slice(0, 10), type: 'assessment', gain: 0 })
+        }
+      })
+
+      // Ações concluídas
+      actionsArr.filter((a: any) => a.status === 'completed' && a.completed_at).forEach((a: any) => {
+        events.push({ date: a.completed_at.slice(0, 10), type: 'action', gain: Number(a.estimated_gain) || 0 })
+      })
+
+      // Ações abertas com prazo (projetadas)
+      openActions.filter((a: any) => a.due_date && a.estimated_gain).forEach((a: any) => {
+        events.push({ date: a.due_date, type: 'action', gain: Number(a.estimated_gain) || 0 })
+      })
+
+      // Agrupa por data e recalcula score acumulado
+      const dateSet = new Set(events.map(e => e.date))
+      const sortedDates = Array.from(dateSet).sort()
+
+      // Para cada data, recalcula o score considerando avaliações até aquela data
+      const timelineData: any[] = []
+
+      // Ponto de hoje com score atual
+      const today = new Date().toISOString().slice(0, 10)
+      timelineData.push({
+        data: 'Hoje',
+        aderencia: overallScore,
+        projetado: null,
+      })
+
+      // Pontos futuros (ações abertas com prazo)
+      let futureScore = overallScore
+      const futureDates = sortedDates.filter(d => d > today)
+      const byDate: Record<string, number> = {}
+      openActions.filter((a: any) => a.due_date && a.estimated_gain).forEach((a: any) => {
+        const d = a.due_date
+        byDate[d] = (byDate[d] ?? 0) + (Number(a.estimated_gain) || 0)
+      })
+      futureDates.slice(0, 8).forEach(d => {
+        futureScore = Math.min(100, futureScore + (byDate[d] ?? 0))
+        const [year, month] = d.split('-')
+        timelineData.push({
+          data: `${month}/${year.slice(2)}`,
+          aderencia: null,
+          projetado: Math.round(futureScore),
+        })
+      })
+
+      // Histórico real: recalcula score para cada data de avaliação passada
+      const pastDates = sortedDates.filter(d => d <= today)
+      if (pastDates.length > 1) {
+        // Para cada data passada, calcula o score com avaliações até aquela data
+        const historicalPoints: any[] = []
+        pastDates.forEach(d => {
+          const assessUntilDate = (assessments ?? []).filter((a: any) => a.published_at && a.published_at.slice(0, 10) <= d)
+          const assessUntilMap = new Map(assessUntilDate.map((a: any) => [a.response_id, a]))
+          let wSum = 0, wTotal = 0
+          ;(requirements ?? []).forEach((req: any) => {
+            const w = Number(req.weight) || 1
+            wTotal += w
+            const resp = respByReqId.get(req.id)
+            if (resp) {
+              const sv = assessUntilMap.get(resp.id)?.score_value
+              if (sv != null) wSum += sv * w
+            }
+          })
+          const score = wTotal > 0 ? Math.round(wSum / wTotal) : 0
+          const [year, month, day] = d.split('-')
+          historicalPoints.push({ data: `${day}/${month}`, aderencia: score, projetado: null })
+        })
+        // Insere histórico antes do "Hoje"
+        timelineData.splice(0, 0, ...historicalPoints)
+      }
+
+      // Progresso por tópico para barra lateral
+      const topicProgressData = (topics ?? []).map((topic: any, i: number) => {
+        const tPrinciples = (principles ?? []).filter((p: any) => p.topic_id === topic.id)
+        const tReqs = (requirements ?? []).filter((r: any) => tPrinciples.some((p: any) => p.id === r.principle_id))
+        const tApproved = tReqs.filter((r: any) => respByReqId.get(r.id)?.status === 'approved').length
+        let wSum = 0, wTotal = 0
+        tReqs.forEach((req: any) => {
+          const w = Number(req.weight) || 1
+          wTotal += w
+          const resp = respByReqId.get(req.id)
+          if (resp) {
+            const sv = assessMap.get(resp.id)?.score_value
+            if (sv != null) wSum += sv * w
+          }
+        })
+        return {
+          code: topic.code,
+          name: topic.title,
+          score: wTotal > 0 ? Math.round(wSum / wTotal) : 0,
+          pct: tReqs.length > 0 ? Math.round((tApproved / tReqs.length) * 100) : 0,
+          color: Object.values(TOPIC_COLORS)[i] ?? '#0A9396',
+        }
       })
 
       return {
-        cycle,
-        topicScores,
-        statusDist,
-        overallScore,
-        projectedScore,
+        cycle, overallScore, projectedScore,
         kpis: { total: totalReqs, approved, pending, notStarted },
-        timelineData,
+        principleScores, timelineData, topicProgressData,
         actionKpis: {
           total: actionsArr.length,
           open: openActions.length,
@@ -223,10 +421,9 @@ export function DashboardPage() {
     </div>
   )
 
-  // Segurança: data pode ser undefined na primeira renderização
   if (!data) return null
 
-  const { cycle, topicScores, statusDist, overallScore, projectedScore, kpis, timelineData, actionKpis } = data
+  const { cycle, overallScore, projectedScore, kpis, principleScores, timelineData, topicProgressData, actionKpis } = data
   const gap = projectedScore - overallScore
 
   if (!cycle) return (
@@ -256,7 +453,7 @@ export function DashboardPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
-        <MetricCard value={`${overallScore}%`} label="Conformidade atual GISTM" color="#0A9396" sub="Baseado nas avaliações publicadas" />
+        <MetricCard value={`${overallScore}%`} label="Conformidade atual GISTM" color="#0A9396" sub="Todos os 77 requisitos considerados" />
         <MetricCard value={kpis.approved} label={`de ${kpis.total} requisitos aprovados`} color="#059669" sub={`${kpis.total > 0 ? Math.round((kpis.approved / kpis.total) * 100) : 0}% do total`} />
         <MetricCard value={kpis.pending} label="Aguardando avaliação HIDROBR" color="#D97706" sub={kpis.pending > 0 ? 'Ação necessária' : 'Nenhum pendente'} />
         <MetricCard value={kpis.notStarted} label="Requisitos não iniciados" color="#6B7280" sub={`de ${kpis.total} total`} />
@@ -267,125 +464,175 @@ export function DashboardPage() {
         <div className="card p-5 text-center">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Aderência atual</div>
           <Gauge value={overallScore} label="conformidade" />
-          <div className="text-xs text-gray-400 mt-2">Baseada nos requisitos avaliados</div>
+          <div className="text-xs text-gray-400 mt-2">Base: todos os {kpis.total} requisitos</div>
         </div>
 
         <div className="card p-5 text-center" style={{ borderTop: '3px solid #059669' }}>
           <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-2">Aderência projetada</div>
           <Gauge value={projectedScore} label="se plano concluído" color="#059669" />
           <div className="text-xs text-emerald-600 font-semibold mt-2">
-            {gap > 0 ? `+${gap}% com conclusão do plano de ação` : 'Nenhum ganho estimado cadastrado'}
+            {gap > 0 ? `+${gap}% com conclusão do plano` : 'Nenhum ganho estimado'}
           </div>
-          <div className="text-[10px] text-gray-400 mt-1">{actionKpis.open} ações abertas · +{actionKpis.totalGain}% estimado</div>
+          <div className="text-[10px] text-gray-400 mt-1">{actionKpis.open} ações abertas · +{actionKpis.totalGain}%</div>
         </div>
 
         <div className="card p-5">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Progresso por tópico</div>
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Score por tópico</div>
           <div className="space-y-2.5">
-            {topicScores.map((t: any) => (
-              <div key={t.name} className="flex items-center gap-2">
-                <span className="text-[10px] font-bold w-6 flex-shrink-0" style={{ color: t.color }}>{t.name}</span>
+            {topicProgressData.map((t: any) => (
+              <div key={t.code} className="flex items-center gap-2">
+                <span className="text-[10px] font-bold w-6 flex-shrink-0" style={{ color: t.color }}>{t.code}</span>
                 <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${t.completionPct}%`, background: t.color }} />
+                  <div className="h-full rounded-full transition-all" style={{ width: `${t.score}%`, background: t.color }} />
                 </div>
-                <span className="text-[10px] font-semibold w-8 text-right" style={{ color: t.color }}>{t.completionPct}%</span>
+                <span className="text-[10px] font-semibold w-8 text-right" style={{ color: t.score === 0 ? '#9CA3AF' : t.color }}>{t.score}%</span>
               </div>
             ))}
-            {topicScores.length === 0 && <p className="text-xs text-gray-400 text-center py-4">Nenhum dado de avaliação ainda</p>}
           </div>
         </div>
       </div>
 
-      {/* Linha do tempo */}
-      {timelineData.length > 1 && (
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-bold text-gray-900">Projeção de aderência ao longo do tempo</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Baseado nos prazos e ganhos estimados das ações abertas</p>
-            </div>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-gray-300 inline-block border-dashed border-t" /> Atual</span>
-              <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-emerald-500 inline-block" /> Projetado</span>
-            </div>
+      {/* Gráfico por princípio */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">Aderência por princípio GISTM</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Score ponderado por requisito · barra transparente = ganho projetado pelo plano de ação</p>
           </div>
-          <ResponsiveContainer width="100%" height={190}>
-            <LineChart data={timelineData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis dataKey="mes" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} unit="%" />
-              <Tooltip formatter={(v: number) => [`${v}%`]} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }} />
-              <ReferenceLine y={100} stroke="#E5E7EB" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey="atual" stroke="#D1D5DB" strokeWidth={1.5} dot={false} strokeDasharray="5 3" name="Atual" />
-              <Line type="monotone" dataKey="projetado" stroke="#059669" strokeWidth={2.5} dot={{ fill: '#059669', r: 4 }} name="Projetado" />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="flex items-center gap-4 text-[10px] text-gray-400">
+            {(['T1','T2','T3','T4','T5','T6'] as const).map(code => (
+              <span key={code} className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-sm" style={{ background: TOPIC_COLORS[code] }} />
+                {code}
+              </span>
+            ))}
+          </div>
         </div>
-      )}
-
-      {/* Barras por tópico + Plano de ação */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card col-span-2 p-5">
-          <h2 className="text-sm font-bold text-gray-900 mb-4">Pontuação média por tópico GISTM</h2>
-          {topicScores.some((t: any) => t.avgScore > 0) ? (
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={topicScores} barSize={32} margin={{ top: 0, right: 10, bottom: 0, left: -10 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v: number) => [`${v} pts`, 'Pontuação']} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }} />
-                <Bar dataKey="avgScore" radius={[6, 6, 0, 0]}>
-                  {topicScores.map((t: any) => <Cell key={t.name} fill={t.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
-              Nenhuma avaliação publicada ainda
-            </div>
-          )}
-        </div>
-
-        <div className="card p-5">
-          <h2 className="text-sm font-bold text-gray-900 mb-4">Plano de ação</h2>
-          <div className="space-y-0">
-            {[
-              { label: 'Total de ações', value: actionKpis.total, color: '#0A9396' },
-              { label: 'Ações abertas', value: actionKpis.open, color: '#D97706' },
-              { label: 'Concluídas', value: actionKpis.completed, color: '#059669' },
-              { label: 'Ganho total estimado', value: `+${actionKpis.totalGain}%`, color: '#059669' },
-            ].map(k => (
-              <div key={k.label} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
-                <span className="text-xs text-gray-500">{k.label}</span>
-                <span className="text-sm font-bold" style={{ color: k.color }}>{k.value}</span>
+        <div className="grid grid-cols-2 gap-x-8">
+          {/* Coluna esquerda: P01-P08 */}
+          <div>
+            {principleScores.slice(0, 8).map((p: any) => (
+              <div key={p.code} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-0">
+                <div className="w-8 flex-shrink-0">
+                  <span className="text-[10px] font-bold" style={{ color: p.topicColor }}>{p.code}</span>
+                </div>
+                <div className="flex-1 relative h-5 bg-gray-100 rounded overflow-hidden">
+                  {p.atual > 0 && (
+                    <div className="absolute left-0 top-0 h-full" style={{
+                      width: `${p.atual}%`,
+                      background: getBarColor(p.atual),
+                      borderRadius: p.gain > 0 ? '4px 0 0 4px' : '4px',
+                    }} />
+                  )}
+                  {p.gain > 0 && (
+                    <div className="absolute top-0 h-full" style={{
+                      left: `${p.atual}%`,
+                      width: `${p.gain}%`,
+                      background: getBarColor(p.atual),
+                      opacity: 0.3,
+                      borderRadius: '0 4px 4px 0',
+                    }} />
+                  )}
+                </div>
+                <div className="flex items-center gap-1 w-16 flex-shrink-0">
+                  <span className="text-[10px] font-semibold" style={{ color: p.atual === 0 ? '#9CA3AF' : getBarColor(p.atual) }}>
+                    {p.atual}%
+                  </span>
+                  {p.gain > 0 && (
+                    <span className="text-[9px] text-emerald-600">+{p.gain}</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
-          {gap > 0 && (
-            <div className="mt-4 bg-emerald-50 rounded-xl p-3">
-              <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1">Se plano 100% concluído</div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-emerald-600">{overallScore}% → {projectedScore}%</span>
-                <span className="text-sm font-black text-emerald-700">+{gap}%</span>
+          {/* Coluna direita: P09-P15 */}
+          <div>
+            {principleScores.slice(8).map((p: any) => (
+              <div key={p.code} className="flex items-center gap-2.5 py-1.5 border-b border-gray-50 last:border-0">
+                <div className="w-8 flex-shrink-0">
+                  <span className="text-[10px] font-bold" style={{ color: p.topicColor }}>{p.code}</span>
+                </div>
+                <div className="flex-1 relative h-5 bg-gray-100 rounded overflow-hidden">
+                  {p.atual > 0 && (
+                    <div className="absolute left-0 top-0 h-full" style={{
+                      width: `${p.atual}%`,
+                      background: getBarColor(p.atual),
+                      borderRadius: p.gain > 0 ? '4px 0 0 4px' : '4px',
+                    }} />
+                  )}
+                  {p.gain > 0 && (
+                    <div className="absolute top-0 h-full" style={{
+                      left: `${p.atual}%`,
+                      width: `${p.gain}%`,
+                      background: getBarColor(p.atual),
+                      opacity: 0.3,
+                      borderRadius: '0 4px 4px 0',
+                    }} />
+                  )}
+                </div>
+                <div className="flex items-center gap-1 w-16 flex-shrink-0">
+                  <span className="text-[10px] font-semibold" style={{ color: p.atual === 0 ? '#9CA3AF' : getBarColor(p.atual) }}>
+                    {p.atual}%
+                  </span>
+                  {p.gain > 0 && (
+                    <span className="text-[9px] text-emerald-600">+{p.gain}</span>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
+        </div>
+        {/* Legenda de cores */}
+        <div className="flex flex-wrap gap-x-5 gap-y-1 mt-4 pt-3 border-t border-gray-100">
+          {[
+            { color: '#059669', label: '≥75% Conforme' },
+            { color: '#2a78d6', label: '50–74% Em progresso' },
+            { color: '#D97706', label: '25–49% Atenção' },
+            { color: '#e34948', label: '1–24% Crítico' },
+            { color: '#D1D5DB', label: '0% Não iniciado' },
+          ].map(l => (
+            <span key={l.label} className="flex items-center gap-1.5 text-[10px] text-gray-400">
+              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: l.color }} />
+              {l.label}
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Status distribution */}
-      {statusDist.length > 0 && (
-        <div className="card p-5">
-          <h2 className="text-sm font-bold text-gray-900 mb-4">Distribuição de status dos requisitos</h2>
-          <div className="grid grid-cols-5 gap-3">
-            {statusDist.map((d: any) => (
-              <div key={d.name} className="text-center p-3 rounded-xl" style={{ background: d.color + '18' }}>
-                <div className="text-2xl font-black" style={{ color: d.color }}>{d.value}</div>
-                <div className="text-[11px] text-gray-500 mt-1 leading-tight">{d.name}</div>
-              </div>
-            ))}
+      {/* Linha do tempo de aderência */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">Evolução da aderência ao longo do tempo</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Linha azul: aderência real por data de avaliação · Linha verde: projeção por prazo das ações
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-0.5 bg-blue-500 inline-block rounded" />
+              Aderência real
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-5 h-0.5 bg-emerald-500 inline-block rounded border-dashed" style={{ borderTop: '2px dashed #059669', background: 'none' }} />
+              Projeção
+            </span>
           </div>
         </div>
-      )}
+        <AdherenceTimelineChart timelineData={timelineData} overallScore={overallScore} />
+      </div>
+
+      {/* Plano de ação */}
+      <div className="grid grid-cols-4 gap-4">
+        {[
+          { label: 'Total de ações', value: actionKpis.total, color: '#0A9396' },
+          { label: 'Ações abertas', value: actionKpis.open, color: '#D97706' },
+          { label: 'Concluídas', value: actionKpis.completed, color: '#059669' },
+          { label: 'Ganho estimado total', value: `+${actionKpis.totalGain}%`, color: '#059669' },
+        ].map(k => (
+          <MetricCard key={k.label} value={k.value} label={k.label} color={k.color} />
+        ))}
+      </div>
     </div>
   )
 }
