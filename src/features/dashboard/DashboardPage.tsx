@@ -88,9 +88,11 @@ export function DashboardPage() {
         supabase.from('requirement_responses')
           .select('*, hidrobr_assessments(score_value)')
           .eq('cycle_id', cycle.id),
-        hb
+       hb
           ? supabase.from('action_items').select('*').order('due_date', { ascending: true })
-          : supabase.from('action_items').select('*').eq('organization_id', orgId ?? '').order('due_date', { ascending: true }),
+          : orgId
+            ? supabase.from('action_items').select('*').eq('organization_id', orgId).order('due_date', { ascending: true })
+            : supabase.from('action_items').select('*').eq('organization_id', 'none').order('due_date', { ascending: true }),
       ])
 
       const respMap = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
