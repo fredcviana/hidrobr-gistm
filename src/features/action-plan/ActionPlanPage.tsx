@@ -1,7 +1,7 @@
 // src/features/action-plan/ActionPlanPage.tsx
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Loader2, X, Save, CheckCircle2, Clock, AlertTriangle, Circle, ChevronDown } from 'lucide-react'
+import { Plus, Loader2, X, Save, CheckCircle2, Clock, AlertTriangle, Circle, ChevronDown, Building2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 
@@ -19,20 +19,17 @@ const STATUS_ACTION: Record<string, { label: string; cls: string }> = {
   overdue:     { label: 'Atrasada',     cls: 'bg-red-50 text-red-700' },
 }
 
-// Todos os princípios GISTM (P01-P15) e TSM (TSM-P01..TSM-P18)
 const GISTM_PRINCIPLES = Array.from({ length: 15 }, (_, i) => ({
   code: `P${String(i + 1).padStart(2, '0')}`,
-  label: `P${String(i + 1).padStart(2, '0')} — Princípio ${i + 1}`,
   standard: 'GISTM',
 }))
 const TSM_PRINCIPLES = Array.from({ length: 18 }, (_, i) => ({
   code: `TSM-P${String(i + 1).padStart(2, '0')}`,
-  label: `TSM-P${String(i + 1).padStart(2, '0')} — Requisito TSM ${i + 1}`,
   standard: 'TSM',
 }))
 const ALL_PRINCIPLES = [...GISTM_PRINCIPLES, ...TSM_PRINCIPLES]
 
-// ── Seletor múltiplo de princípios ────────────────────────────
+// ── Seletor de princípios ─────────────────────────────────────
 function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -48,10 +45,8 @@ function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v:
 
   return (
     <div className="relative">
-      <div
-        className="form-input cursor-pointer flex items-center gap-2 flex-wrap min-h-[40px]"
-        onClick={() => setOpen(!open)}
-      >
+      <div className="form-input cursor-pointer flex items-center gap-2 flex-wrap min-h-[40px]"
+        onClick={() => setOpen(!open)}>
         {value.length === 0 ? (
           <span className="text-gray-400 text-sm">Selecione princípios...</span>
         ) : (
@@ -66,24 +61,22 @@ function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v:
         <ChevronDown className="w-4 h-4 text-gray-400 ml-auto flex-shrink-0" />
       </div>
       {open && (
-        <div className="absolute z-30 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-hidden flex flex-col">
+        <div className="absolute z-30 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-56 overflow-hidden flex flex-col">
           <div className="p-2 border-b border-gray-100">
-            <input className="form-input text-sm py-1.5" placeholder="Buscar princípio..."
+            <input className="form-input text-sm py-1.5" placeholder="Buscar..."
               value={search} onChange={e => setSearch(e.target.value)}
               onClick={e => e.stopPropagation()} autoFocus />
           </div>
           <div className="overflow-y-auto flex-1">
             {['GISTM', 'TSM'].map(std => (
               <div key={std}>
-                <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50 sticky top-0">
-                  {std}
-                </div>
+                <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50 sticky top-0">{std}</div>
                 {filtered.filter(p => p.standard === std).map(p => (
                   <div key={p.code}
-                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50 transition-colors ${value.includes(p.code) ? 'bg-brand-50' : ''}`}
+                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50 ${value.includes(p.code) ? 'bg-brand-50' : ''}`}
                     onClick={() => toggle(p.code)}>
                     <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${value.includes(p.code) ? 'bg-brand-600' : 'border-2 border-gray-300'}`}>
-                      {value.includes(p.code) && <span className="text-white text-[10px] font-bold leading-none">✓</span>}
+                      {value.includes(p.code) && <span className="text-white text-[10px] font-bold">✓</span>}
                     </div>
                     <span className="text-sm text-gray-700">{p.code}</span>
                   </div>
@@ -92,7 +85,7 @@ function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v:
             ))}
           </div>
           <div className="p-2 border-t border-gray-100 flex justify-between">
-            <button className="text-xs text-gray-400 hover:text-gray-600" onClick={() => onChange([])}>Limpar</button>
+            <button className="text-xs text-gray-400" onClick={() => onChange([])}>Limpar</button>
             <button className="text-xs text-brand-600 font-semibold" onClick={() => setOpen(false)}>Fechar</button>
           </div>
         </div>
@@ -101,52 +94,17 @@ function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v:
   )
 }
 
-// ── Seletor múltiplo de barragens ─────────────────────────────
-function FacilitySelector({ value, onChange, orgId }: {
-  value: string[]; onChange: (v: string[]) => void; orgId: string
-}) {
-  const { data: facilities } = useQuery({
-    queryKey: ['facilities-for-action', orgId],
-    enabled: !!orgId,
-    queryFn: async () => {
-      let q = supabase.from('tailings_facilities').select('id,name,organizations(name)').eq('is_active', true).order('name')
-      if (orgId) q = q.eq('organization_id', orgId)
-      const { data } = await q
-      return data ?? []
-    },
-  })
-
-  function toggle(id: string) {
-    onChange(value.includes(id) ? value.filter(f => f !== id) : [...value, id])
-  }
-
-  return (
-    <div className="space-y-1.5">
-      {(facilities ?? []).map((f: any) => (
-        <div key={f.id}
-          className={`flex items-center gap-2.5 p-2.5 rounded-lg cursor-pointer border transition-all ${value.includes(f.id) ? 'border-brand-300 bg-brand-50' : 'border-gray-200 hover:border-gray-300 bg-white'}`}
-          onClick={() => toggle(f.id)}>
-          <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${value.includes(f.id) ? 'bg-brand-600' : 'border-2 border-gray-300'}`}>
-            {value.includes(f.id) && <span className="text-white text-[10px] font-bold leading-none">✓</span>}
-          </div>
-          <span className="text-sm text-gray-700">{f.name}</span>
-          {f.organizations?.name && <span className="text-xs text-gray-400 ml-auto">{f.organizations.name}</span>}
-        </div>
-      ))}
-      {(facilities ?? []).length === 0 && (
-        <p className="text-xs text-gray-400 text-center py-2">Nenhuma barragem cadastrada</p>
-      )}
-    </div>
-  )
-}
-
 // ── Modal de criação/edição ────────────────────────────────────
-function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onClose: () => void }) {
+function ActionModal({ defaultOrgId, item, onClose }: {
+  defaultOrgId: string; item?: any; onClose: () => void
+}) {
   const { profile } = useAuthStore()
+  const hb = isHidrobr(profile?.role)
   const qc = useQueryClient()
+
   const [form, setForm] = useState({
+    organization_id: item?.organization_id ?? defaultOrgId,
     summary: item?.summary ?? item?.title ?? '',
-    title: item?.title ?? '',           // detalhamento
     description: item?.description ?? '',
     priority: item?.priority ?? 'medium',
     status: item?.status ?? 'open',
@@ -157,19 +115,51 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
   })
   const [error, setError] = useState('')
 
+  // Busca organizações (só para HIDROBR)
+  const { data: orgs } = useQuery({
+    queryKey: ['orgs-for-action'],
+    enabled: hb,
+    queryFn: async () => {
+      const { data } = await supabase.from('organizations').select('id,name').eq('is_active', true).order('name')
+      return data ?? []
+    },
+  })
+
+  // Busca barragens da organização selecionada
+  const { data: facilities } = useQuery({
+    queryKey: ['facilities-for-action', form.organization_id],
+    enabled: !!form.organization_id,
+    queryFn: async () => {
+      const { data } = await supabase.from('tailings_facilities')
+        .select('id,name').eq('organization_id', form.organization_id).eq('is_active', true).order('name')
+      return data ?? []
+    },
+  })
+
+  function toggleFacility(id: string) {
+    setForm(f => ({
+      ...f,
+      facility_ids: f.facility_ids.includes(id)
+        ? f.facility_ids.filter((x: string) => x !== id)
+        : [...f.facility_ids, id],
+    }))
+  }
+
   const mut = useMutation({
     mutationFn: async () => {
+      if (!form.organization_id) throw new Error('Selecione uma organização')
+      if (!form.summary) throw new Error('Informe o título da ação')
       const payload = {
+        organization_id: form.organization_id,
         summary: form.summary,
-        title: form.summary,   // mantém compatibilidade
+        title: form.summary,
         description: form.description,
         priority: form.priority,
         status: form.status,
         due_date: form.due_date || null,
         facility_ids: form.facility_ids,
         principle_codes: form.principle_codes,
-        estimated_gain: form.estimated_gain,
-        organization_id: orgId,
+        estimated_gain: form.estimated_gain || 0,
         updated_at: new Date().toISOString(),
       }
       if (item?.id) {
@@ -180,14 +170,16 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
         if (error) throw error
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['action-items', orgId] }); onClose() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['action-items'] }); onClose() },
     onError: (e: any) => setError(e.message),
   })
+
+  const selectedOrg = orgs?.find((o: any) => o.id === form.organization_id)
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[94vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-base font-bold text-gray-900">
             {item ? 'Editar ação' : 'Nova ação de melhoria'}
@@ -200,9 +192,33 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
         <div className="overflow-y-auto p-6 space-y-4 flex-1">
           {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>}
 
+          {/* Organização (só HIDROBR vê) */}
+          {hb && (
+            <div>
+              <label className="form-label">
+                Organização cliente *
+              </label>
+              <select className="form-input" value={form.organization_id}
+                onChange={e => setForm({ ...form, organization_id: e.target.value, facility_ids: [] })}>
+                <option value="">Selecione a organização...</option>
+                {(orgs ?? []).map((o: any) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Banner da organização selecionada */}
+          {hb && selectedOrg && (
+            <div className="bg-brand-50 border border-brand-200 rounded-xl p-3 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-brand-600 flex-shrink-0" />
+              <span className="text-sm font-semibold text-brand-700">{selectedOrg.name}</span>
+            </div>
+          )}
+
           {/* Ação resumida */}
           <div>
-            <label className="form-label">Ação resumida * <span className="text-gray-400 font-normal">(título curto)</span></label>
+            <label className="form-label">Ação resumida *</label>
             <input className="form-input" placeholder="Ex: Elaborar PAE conforme Portaria 70.389/2017"
               value={form.summary} onChange={e => setForm({ ...form, summary: e.target.value })} />
           </div>
@@ -211,7 +227,7 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
           <div>
             <label className="form-label">Detalhamento da ação</label>
             <textarea className="form-input resize-none" rows={4}
-              placeholder="Descreva em detalhes o que deve ser feito, como, por quem e quais são os critérios de conclusão..."
+              placeholder="Descreva em detalhes o que deve ser feito, como, por quem e os critérios de conclusão..."
               value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
           </div>
 
@@ -236,13 +252,37 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
             </div>
           </div>
 
-          {/* Barragens associadas */}
+          {/* Estruturas associadas */}
           <div>
             <label className="form-label">
               Estruturas associadas
-              <span className="text-gray-400 font-normal ml-1">(selecione uma ou mais barragens)</span>
+              <span className="text-gray-400 font-normal ml-1">(uma ou mais barragens)</span>
             </label>
-            <FacilitySelector value={form.facility_ids} onChange={v => setForm({ ...form, facility_ids: v })} orgId={orgId} />
+            {!form.organization_id ? (
+              <div className="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                {hb ? 'Selecione uma organização primeiro' : 'Nenhuma barragem disponível'}
+              </div>
+            ) : (facilities ?? []).length === 0 ? (
+              <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                Nenhuma barragem cadastrada para esta organização
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(facilities ?? []).map((f: any) => {
+                  const selected = form.facility_ids.includes(f.id)
+                  return (
+                    <div key={f.id}
+                      className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border-2 transition-all ${selected ? 'border-brand-400 bg-brand-50' : 'border-gray-200 hover:border-gray-300'}`}
+                      onClick={() => toggleFacility(f.id)}>
+                      <div className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border-2 ${selected ? 'bg-brand-600 border-brand-600' : 'border-gray-300'}`}>
+                        {selected && <span className="text-white text-[11px] font-bold">✓</span>}
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">{f.name}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Princípios vinculados */}
@@ -267,7 +307,7 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
                 onChange={e => setForm({ ...form, estimated_gain: parseFloat(e.target.value) || 0 })} />
               <p className="text-xs text-gray-500 flex-1">
                 Quantos pontos % de conformidade esta ação vai gerar quando concluída.
-                Ex: se os requisitos vinculados valem 5% do score total, informe <strong>5</strong>.
+                Aparece no dashboard como projeção de aderência futura.
               </p>
             </div>
           </div>
@@ -276,8 +316,15 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
           <button
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', background: mut.isPending || !form.summary ? '#9CA3AF' : '#002B3D', color: 'white', border: 'none', cursor: mut.isPending || !form.summary ? 'not-allowed' : 'pointer' }}
-            onClick={() => mut.mutate()} disabled={mut.isPending || !form.summary}>
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600',
+              background: mut.isPending || !form.summary || !form.organization_id ? '#9CA3AF' : '#002B3D',
+              color: 'white', border: 'none',
+              cursor: mut.isPending || !form.summary || !form.organization_id ? 'not-allowed' : 'pointer',
+            }}
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending || !form.summary || !form.organization_id}>
             {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {item ? 'Salvar alterações' : 'Criar ação'}
           </button>
@@ -288,42 +335,49 @@ function ActionModal({ orgId, item, onClose }: { orgId: string; item?: any; onCl
 }
 
 // ── Card de ação ──────────────────────────────────────────────
-function ActionCard({ action, orgId, onEdit }: { action: any; orgId: string; onEdit: () => void }) {
+function ActionCard({ action, onEdit }: { action: any; onEdit: () => void }) {
+  const { profile } = useAuthStore()
+  const hb = isHidrobr(profile?.role)
   const qc = useQueryClient()
   const p = PRIORITY[action.priority] ?? PRIORITY.medium
   const s = STATUS_ACTION[action.status] ?? STATUS_ACTION.open
   const overdue = action.status !== 'completed' && action.due_date && new Date(action.due_date) < new Date()
 
-  // Buscar nomes das barragens
   const { data: facilities } = useQuery({
-    queryKey: ['facilities-names', action.facility_ids],
+    queryKey: ['facilities-names', (action.facility_ids ?? []).join(',')],
     enabled: (action.facility_ids?.length ?? 0) > 0,
     queryFn: async () => {
-      const { data } = await supabase.from('tailings_facilities').select('id,name')
-        .in('id', action.facility_ids)
+      const { data } = await supabase.from('tailings_facilities').select('id,name').in('id', action.facility_ids)
       return data ?? []
+    },
+  })
+
+  const { data: org } = useQuery({
+    queryKey: ['org-name', action.organization_id],
+    enabled: !!action.organization_id && hb,
+    queryFn: async () => {
+      const { data } = await supabase.from('organizations').select('name').eq('id', action.organization_id).single()
+      return data
     },
   })
 
   const completeMut = useMutation({
     mutationFn: async () => supabase.from('action_items').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', action.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['action-items', orgId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['action-items'] }),
   })
   const deleteMut = useMutation({
     mutationFn: async () => supabase.from('action_items').delete().eq('id', action.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['action-items', orgId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['action-items'] }),
   })
 
   return (
     <div className="card p-4 hover:shadow-md transition-shadow">
       <div className="flex items-start gap-3 mb-3">
-        {/* ID */}
-        <div className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0">
+        <div className="w-11 h-11 rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0">
           <span className="text-[10px] font-bold text-brand-600 text-center leading-tight">
-            #{action.action_id ?? action.id?.slice(-4) ?? '—'}
+            #{action.action_id ?? '—'}
           </span>
         </div>
-
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
             <h3 className="text-sm font-bold text-gray-900 leading-snug">{action.summary ?? action.title}</h3>
@@ -332,13 +386,11 @@ function ActionCard({ action, orgId, onEdit }: { action: any; orgId: string; onE
               <span className={`badge text-[10px] ${s.cls}`}>{s.label}</span>
             </div>
           </div>
-
           {action.description && (
             <p className="text-xs text-gray-500 leading-relaxed mb-2 line-clamp-2">{action.description}</p>
           )}
-
-          {/* Meta info */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-400">
+            {hb && org && <span className="font-semibold text-brand-600">🏢 {org.name}</span>}
             {action.due_date && (
               <span className={overdue ? 'text-red-600 font-semibold' : ''}>
                 {overdue ? '⚠ ' : '📅 '}Prazo: {new Date(action.due_date).toLocaleDateString('pt-BR')}
@@ -357,25 +409,15 @@ function ActionCard({ action, orgId, onEdit }: { action: any; orgId: string; onE
         </div>
       </div>
 
-      {/* Ações */}
       <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
         {action.status !== 'completed' && (
-          <button
-            className="text-xs text-emerald-600 border border-emerald-200 hover:bg-emerald-50 px-3 py-1.5 rounded-lg font-semibold transition-colors"
-            onClick={() => completeMut.mutate()}>
-            ✓ Concluir
-          </button>
+          <button className="text-xs text-emerald-600 border border-emerald-200 hover:bg-emerald-50 px-3 py-1.5 rounded-lg font-semibold transition-colors"
+            onClick={() => completeMut.mutate()}>✓ Concluir</button>
         )}
-        <button
-          className="text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg font-semibold transition-colors"
-          onClick={onEdit}>
-          ✏️ Editar
-        </button>
-        <button
-          className="text-xs text-red-400 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-lg font-semibold transition-colors"
-          onClick={() => { if (confirm('Remover esta ação?')) deleteMut.mutate() }}>
-          🗑️
-        </button>
+        <button className="text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg font-semibold transition-colors"
+          onClick={onEdit}>✏️ Editar</button>
+        <button className="text-xs text-red-400 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-lg font-semibold transition-colors"
+          onClick={() => { if (confirm('Remover esta ação?')) deleteMut.mutate() }}>🗑️</button>
       </div>
     </div>
   )
@@ -386,18 +428,27 @@ export function ActionPlanPage() {
   const { profile } = useAuthStore()
   const hb = isHidrobr(profile?.role)
   const [filter, setFilter] = useState('all')
+  const [filterOrg, setFilterOrg] = useState('')
   const [filterPrinciple, setFilterPrinciple] = useState('')
   const [modal, setModal] = useState<any>(null)
 
   const orgId = profile?.organization_id ?? ''
 
+  // Organizações para filtro (HIDROBR)
+  const { data: orgs } = useQuery({
+    queryKey: ['orgs-for-filter'],
+    enabled: hb,
+    queryFn: async () => {
+      const { data } = await supabase.from('organizations').select('id,name').eq('is_active', true).order('name')
+      return data ?? []
+    },
+  })
+
   const { data, isLoading } = useQuery({
-    queryKey: ['action-items', orgId],
+    queryKey: ['action-items', orgId, hb],
     enabled: !!profile,
     queryFn: async () => {
-      let q = supabase.from('action_items')
-        .select('*')
-        .order('created_at', { ascending: false })
+      let q = supabase.from('action_items').select('*').order('created_at', { ascending: false })
       if (!hb && orgId) q = q.eq('organization_id', orgId)
       const { data } = await q
       return data ?? []
@@ -406,6 +457,7 @@ export function ActionPlanPage() {
 
   const filtered = (data ?? []).filter((a: any) => {
     if (filter !== 'all' && a.status !== filter) return false
+    if (filterOrg && a.organization_id !== filterOrg) return false
     if (filterPrinciple && !(a.principle_codes ?? []).includes(filterPrinciple)) return false
     return true
   })
@@ -417,6 +469,8 @@ export function ActionPlanPage() {
     inProgress: all.filter((a: any) => a.status === 'in_progress').length,
     completed: all.filter((a: any) => a.status === 'completed').length,
     overdue: all.filter((a: any) => a.status !== 'completed' && a.due_date && new Date(a.due_date) < new Date()).length,
+    totalGain: all.filter((a: any) => !['completed', 'cancelled'].includes(a.status))
+      .reduce((s: number, a: any) => s + (Number(a.estimated_gain) || 0), 0),
   }
 
   return (
@@ -424,7 +478,7 @@ export function ActionPlanPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Plano de Ação</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Ações de melhoria com rastreabilidade por barragem e princípio</p>
+          <p className="text-sm text-gray-500 mt-0.5">Ações de melhoria com rastreabilidade por cliente, barragem e princípio</p>
         </div>
         <button
           style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', background: '#002B3D', color: 'white', border: 'none', cursor: 'pointer' }}
@@ -440,7 +494,7 @@ export function ActionPlanPage() {
           { label: 'Abertas', value: kpis.open, color: '#3B82F6' },
           { label: 'Em andamento', value: kpis.inProgress, color: '#8B5CF6' },
           { label: 'Concluídas', value: kpis.completed, color: '#059669' },
-          { label: 'Atrasadas', value: kpis.overdue, color: '#DC2626' },
+          { label: 'Ganho estimado', value: `+${Math.round(kpis.totalGain)}%`, color: '#059669' },
         ].map(k => (
           <div key={k.label} className="card p-3 text-center" style={{ borderTop: `3px solid ${k.color}` }}>
             <div className="text-2xl font-bold" style={{ color: k.color }}>{k.value}</div>
@@ -450,17 +504,22 @@ export function ActionPlanPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-3 mb-5 flex-wrap">
+      <div className="flex gap-3 mb-5 flex-wrap items-center">
         <div className="flex gap-2 flex-wrap">
-          {[['all', 'Todas'], ['open', 'Abertas'], ['in_progress', 'Em andamento'], ['completed', 'Concluídas']].map(([v, l]) => (
+          {[['all','Todas'],['open','Abertas'],['in_progress','Em andamento'],['completed','Concluídas']].map(([v, l]) => (
             <button key={v} onClick={() => setFilter(v)}
               className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === v ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-gray-600 border-gray-200'}`}>
               {l}
             </button>
           ))}
         </div>
-        <select className="form-input w-48 text-xs"
-          value={filterPrinciple} onChange={e => setFilterPrinciple(e.target.value)}>
+        {hb && (
+          <select className="form-input w-48 text-xs" value={filterOrg} onChange={e => setFilterOrg(e.target.value)}>
+            <option value="">Todos os clientes</option>
+            {(orgs ?? []).map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        )}
+        <select className="form-input w-44 text-xs" value={filterPrinciple} onChange={e => setFilterPrinciple(e.target.value)}>
           <option value="">Todos os princípios</option>
           <optgroup label="GISTM">
             {GISTM_PRINCIPLES.map(p => <option key={p.code} value={p.code}>{p.code}</option>)}
@@ -490,19 +549,14 @@ export function ActionPlanPage() {
       ) : (
         <div className="grid grid-cols-2 gap-4">
           {filtered.map((action: any) => (
-            <ActionCard
-              key={action.id}
-              action={action}
-              orgId={orgId}
-              onEdit={() => setModal(action)}
-            />
+            <ActionCard key={action.id} action={action} onEdit={() => setModal(action)} />
           ))}
         </div>
       )}
 
       {modal !== null && (
         <ActionModal
-          orgId={orgId}
+          defaultOrgId={orgId}
           item={Object.keys(modal).length > 0 ? modal : undefined}
           onClose={() => setModal(null)}
         />
