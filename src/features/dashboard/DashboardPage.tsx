@@ -79,13 +79,22 @@ export function DashboardPage() {
       const { data: principles } = await supabase.from('gistm_principles').select('*').order('display_order')
       const { data: requirements } = await supabase.from('gistm_requirements').select('*')
       const { data: responses } = await supabase.from('requirement_responses')
-        .select('*, hidrobr_assessments(score_value)')
+        .select('*')
         .eq('cycle_id', cycle.id)
+      // Busca avaliações separadamente (mais confiável que join aninhado)
+      const { data: assessments } = await supabase.from('hidrobr_assessments')
+        .select('response_id, score, score_value')
+        .in('response_id', (responses ?? []).map((r: any) => r.id))
+      const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
       let actionsQuery = supabase.from('action_items').select('*').order('due_date', { ascending: true })
       if (!hb && orgId) actionsQuery = actionsQuery.eq('organization_id', orgId)
       const { data: actionsRaw } = await actionsQuery
 
-      const respMap = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
+      // Combina respostas com avaliações
+      const respMap = new Map((responses ?? []).map((r: any) => [
+        r.requirement_id,
+        { ...r, assessment: assessMap.get(r.id) ?? null }
+      ]))
 
       // Score por tópico
       const topicScores = (topics ?? []).map((topic: any, i: number) => {
@@ -96,7 +105,7 @@ export function DashboardPage() {
         // Score ponderado pelo peso de cada requisito
         let weightedSum = 0, totalWeight = 0
         topicReqs.forEach((r: any) => {
-          const sv = respMap.get(r.id)?.hidrobr_assessments?.[0]?.score_value
+          const sv = respMap.get(r.id)?.assessment?.score_value
           if (sv != null) {
             const w = Number(r.weight) || 1
             weightedSum += sv * w
@@ -125,7 +134,7 @@ export function DashboardPage() {
       const reqWeightMap = new Map((requirements ?? []).map((r: any) => [r.id, Number(r.weight) || 1]))
       let globalWeightedSum = 0, globalTotalWeight = 0
       ;(responses ?? []).forEach((r: any) => {
-        const sv = r.hidrobr_assessments?.[0]?.score_value
+        const sv = assessMap.get(r.id)?.score_value
         if (sv != null) {
           const w = reqWeightMap.get(r.requirement_id) ?? 1
           globalWeightedSum += sv * w
