@@ -77,21 +77,9 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
     }
   }
 
-  async function handleSave(newStatus?: string) {
-    setSaving(true); setErrMsg(''); setSuccessMsg('')
-    try {
-      await ensureResponse(newStatus)
-      await qc.invalidateQueries({ queryKey: ['requirements-v3'] })
-      onClose()
-    } catch (e: any) {
-      setErrMsg(e.message ?? 'Erro ao salvar')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleAssess() {
+async function handleAssess() {
     setErrMsg(''); setSuccessMsg('')
+    console.log('handleAssess chamado', { responseId: response?.id, score, assessTextLen: assessText.trim().length })
 
     // Validações
     if (!response?.id) {
