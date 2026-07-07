@@ -1,7 +1,7 @@
 // src/features/auth/LoginPage.tsx
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export function LoginPage() {
@@ -33,14 +33,9 @@ export function LoginPage() {
     <div className="min-h-screen bg-brand-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-brand-400 flex items-center justify-center">
-            <Shield className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-white tracking-tight">HIDROBR</div>
-            <div className="text-xs text-white/40 uppercase tracking-widest">GISTM Manager</div>
-          </div>
+        <div className="flex flex-col items-center gap-2 mb-8">
+          <img src="/logo.png" alt="HIDROBR" className="h-16 w-auto" />
+          <div className="text-xs text-white/40 uppercase tracking-widest">Sustainability Manager</div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
@@ -76,6 +71,21 @@ export function LoginPage() {
             </button>
           </form>
 
+          <div className="mt-6 pt-6 border-t border-gray-100">
+            <p className="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wider">Credenciais criadas no Supabase</p>
+            <div className="space-y-2">
+              {[
+                { role: 'HIDROBR Admin', email: 'admin@hidrobr.com.br' },
+                { role: 'Consultor', email: 'consultor@hidrobr.com.br' },
+                { role: 'Cliente', email: 'cliente@mineracao.com.br' },
+              ].map(u => (
+                <div key={u.role} className="bg-gray-50 rounded-lg px-3 py-2 text-xs">
+                  <span className="font-semibold text-gray-700">{u.role}: </span>
+                  <span className="text-gray-500">{u.email}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <p className="text-center text-xs text-white/30 mt-6">
