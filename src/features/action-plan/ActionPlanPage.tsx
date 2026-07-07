@@ -1,7 +1,7 @@
 // src/features/action-plan/ActionPlanPage.tsx
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Loader2, X, Save, CheckCircle2, Clock, AlertTriangle, Circle, ChevronDown, Building2, ChevronUp } from 'lucide-react'
+import { Plus, Loader2, X, Save, CheckCircle2, Clock, AlertTriangle, Circle, ChevronDown, Building2, ChevronUp, Send } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 
@@ -12,10 +12,11 @@ const PRIORITY: Record<string, { label: string; cls: string }> = {
   low:      { label: 'Baixa',    cls: 'bg-green-100 text-green-700' },
 }
 const STATUS_ACTION: Record<string, { label: string; cls: string }> = {
-  open:        { label: 'Aberta',       cls: 'bg-blue-50 text-blue-700' },
-  in_progress: { label: 'Em andamento', cls: 'bg-purple-50 text-purple-700' },
-  completed:   { label: 'Concluída',    cls: 'bg-emerald-50 text-emerald-700' },
-  cancelled:   { label: 'Cancelada',    cls: 'bg-gray-100 text-gray-500' },
+  open:           { label: 'Aberta',           cls: 'bg-blue-50 text-blue-700' },
+  in_progress:    { label: 'Em andamento',     cls: 'bg-purple-50 text-purple-700' },
+  pending_review: { label: 'Ag. HIDROBR',      cls: 'bg-amber-50 text-amber-700' },
+  completed:      { label: 'Concluída',        cls: 'bg-emerald-50 text-emerald-700' },
+  cancelled:      { label: 'Cancelada',        cls: 'bg-gray-100 text-gray-500' },
 }
 const SCORE_OPTIONS = [
   { key: 'fully_conforming',     label: 'Totalmente Conforme',   value: 100, color: '#059669', bg: '#D1FAE5' },
@@ -75,7 +76,132 @@ function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v:
   )
 }
 
-// ── Modal de Reavaliação ──────────────────────────────────────
+// ── Modal do Cliente: Solicitar reavaliação ──────────────────
+function ClientConcludeModal({ action, cycleId, onClose, onComplete }: {
+  action: any; cycleId: string; onClose: () => void; onComplete: () => void
+}) {
+  const { profile } = useAuthStore()
+  const qc = useQueryClient()
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [errMsg, setErrMsg] = useState('')
+
+  const principleCount = action.principle_codes?.length ?? 0
+
+  async function handleSubmit() {
+    setSaving(true); setErrMsg('')
+    try {
+      // Marca ação como pending_review
+      const { error: actionErr } = await supabase.from('action_items').update({
+        status: 'pending_review',
+        updated_at: new Date().toISOString(),
+      }).eq('id', action.id)
+      if (actionErr) throw actionErr
+
+      // Busca requisitos dos princípios vinculados e muda status para submitted
+      if (principleCount > 0 && cycleId) {
+        const gistmCodes = (action.principle_codes ?? []).filter((c: string) => !c.startsWith('TSM'))
+        if (gistmCodes.length > 0) {
+          const { data: principles } = await supabase.from('gistm_principles')
+            .select('id').in('code', gistmCodes)
+          if (principles?.length) {
+            const { data: reqs } = await supabase.from('gistm_requirements')
+              .select('id').in('principle_id', principles.map((p: any) => p.id))
+            if (reqs?.length) {
+              // Cria ou atualiza respostas para submitted
+              for (const req of reqs) {
+                const { data: existing } = await supabase.from('requirement_responses')
+                  .select('id, status').eq('cycle_id', cycleId).eq('requirement_id', req.id).single()
+                if (existing) {
+                  // Só muda para submitted se ainda não foi avaliado
+                  if (!['approved', 'needs_revision'].includes(existing.status)) {
+                    await supabase.from('requirement_responses').update({
+                      status: 'submitted',
+                      implementation_text: notes || 'Ação concluída pelo cliente — aguardando avaliação da HIDROBR.',
+                      submitted_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    }).eq('id', existing.id)
+                  }
+                } else {
+                  await supabase.from('requirement_responses').insert({
+                    cycle_id: cycleId,
+                    requirement_id: req.id,
+                    status: 'submitted',
+                    implementation_text: notes || 'Ação concluída pelo cliente — aguardando avaliação da HIDROBR.',
+                    submitted_at: new Date().toISOString(),
+                  })
+                }
+              }
+            }
+          }
+        }
+      }
+
+      await qc.invalidateQueries({ queryKey: ['action-items'] })
+      await qc.invalidateQueries({ queryKey: ['requirements-v3'] })
+      onComplete()
+    } catch (e: any) {
+      setErrMsg(e.message ?? 'Erro ao submeter')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div className="flex items-start gap-4 px-6 py-5 border-b border-gray-200">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+            <Send className="w-5 h-5 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-base font-bold text-gray-900">Solicitar avaliação da HIDROBR</h2>
+            <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">{action.summary ?? action.title}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          {errMsg && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{errMsg}</div>}
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+            <div className="font-semibold mb-1">O que acontece ao confirmar:</div>
+            <ul className="space-y-1 text-xs list-disc list-inside">
+              <li>A ação ficará com status <strong>"Ag. HIDROBR"</strong></li>
+              {principleCount > 0 && (
+                <li>Os {principleCount} princípio(s) vinculados serão submetidos para avaliação</li>
+              )}
+              <li>A equipe HIDROBR será notificada para realizar a avaliação</li>
+              <li>Você receberá uma notificação quando a avaliação for publicada</li>
+            </ul>
+          </div>
+
+          <div>
+            <label className="form-label">
+              Descreva como a ação foi implementada
+              <span className="text-gray-400 font-normal ml-1">(opcional)</span>
+            </label>
+            <textarea className="form-input resize-none" rows={4}
+              placeholder="Descreva o que foi feito, documentos gerados, processos implementados, etc. Isso ajudará a HIDROBR a realizar a avaliação..."
+              value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', background: saving ? '#9CA3AF' : '#D97706', color: 'white', border: 'none', cursor: saving ? 'not-allowed' : 'pointer' }}
+            onClick={handleSubmit} disabled={saving}>
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><Send className="w-4 h-4" /> Submeter para avaliação</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal HIDROBR: Avaliar e concluir ação ────────────────────
 function ReassessmentModal({ action, cycleId, onClose, onComplete }: {
   action: any; cycleId: string; onClose: () => void; onComplete: () => void
 }) {
@@ -451,73 +577,6 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
     },
   })
 
-  // Busca ciclo ativo da organização para calcular potencial de ganho
-  const { data: gainData } = useQuery({
-    queryKey: ['gain-potential', form.organization_id, form.principle_codes],
-    enabled: !!form.organization_id && form.principle_codes.length > 0,
-    queryFn: async () => {
-      // Busca ciclo ativo da organização
-      const { data: cycles } = await supabase.from('assessment_cycles')
-        .select('id').eq('organization_id', form.organization_id).eq('status', 'active').limit(1)
-      const cycleId = cycles?.[0]?.id
-      if (!cycleId) return { maxGain: 0, breakdown: [], totalWeight: 0 }
-
-      // Busca princípios pelos códigos selecionados
-      const { data: principles } = await supabase.from('gistm_principles')
-        .select('id, code, number').in('code', form.principle_codes.filter((c: string) => !c.startsWith('TSM')))
-      if (!principles?.length) return { maxGain: 0, breakdown: [], totalWeight: 0 }
-
-      // Busca requisitos desses princípios
-      const { data: reqs } = await supabase.from('gistm_requirements')
-        .select('id, code, weight, principle_id').in('principle_id', principles.map((p: any) => p.id))
-
-      // Busca respostas e avaliações existentes no ciclo
-      const reqIds = (reqs ?? []).map((r: any) => r.id)
-      const { data: responses } = reqIds.length > 0
-        ? await supabase.from('requirement_responses')
-            .select('id, requirement_id, status').eq('cycle_id', cycleId).in('requirement_id', reqIds)
-        : { data: [] }
-      const { data: assessments } = (responses ?? []).length > 0
-        ? await supabase.from('hidrobr_assessments')
-            .select('response_id, score_value').in('response_id', (responses ?? []).map((r: any) => r.id))
-        : { data: [] }
-
-      // Busca peso total de todos os 77 requisitos (denominador do score)
-      const { data: allReqs } = await supabase.from('gistm_requirements').select('weight')
-      const totalWeight = (allReqs ?? []).reduce((s: number, r: any) => s + (Number(r.weight) || 1), 0)
-
-      // Calcula ganho potencial por requisito
-      const respMap = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
-      const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
-      const principleMap = new Map((principles ?? []).map((p: any) => [p.id, p]))
-
-      let maxGainPoints = 0
-      const breakdown: any[] = []
-
-      ;(reqs ?? []).forEach((req: any) => {
-        const w = Number(req.weight) || 1
-        const resp = respMap.get(req.id)
-        const currentScore = resp ? (assessMap.get(resp.id)?.score_value ?? 0) : 0
-        const gap = (100 - currentScore) * w // pontos que faltam, ponderados
-        maxGainPoints += gap
-        const principle = principleMap.get(req.principle_id)
-        breakdown.push({
-          code: req.code,
-          principleCode: principle?.code ?? '',
-          currentScore,
-          weight: w,
-          gap: Math.round(gap),
-          status: resp?.status ?? 'not_started',
-        })
-      })
-
-      // Converte para % do score global
-      const maxGain = totalWeight > 0 ? Math.round((maxGainPoints / totalWeight) * 100) / 100 : 0
-
-      return { maxGain: Math.min(100, maxGain), breakdown, totalWeight }
-    },
-  })
-
   function toggleFacility(id: string) {
     setForm(f => ({
       ...f,
@@ -640,83 +699,13 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
             <label className="form-label">Princípios/Requisitos vinculados <span className="text-gray-400 font-normal">(GISTM e/ou TSM)</span></label>
             <PrincipleSelector value={form.principle_codes} onChange={v => setForm({ ...form, principle_codes: v })} />
           </div>
-          {/* Calculadora de ganho */}
-          <div className="border border-brand-200 rounded-xl p-4 bg-brand-50">
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-[10px] font-bold text-brand-700 uppercase tracking-wider">
-                Ganho estimado de aderência
-              </label>
-              {gainData && gainData.maxGain > 0 && (
-                <span className="text-[10px] font-semibold text-brand-600 bg-white border border-brand-200 px-2 py-0.5 rounded-full">
-                  Potencial máximo: +{gainData.maxGain.toFixed(1)}%
-                </span>
-              )}
+          <div>
+            <label className="form-label">Ganho estimado de aderência <span className="text-gray-400 font-normal">(pontos % ao concluir)</span></label>
+            <div className="flex items-center gap-3">
+              <input type="number" min="0" max="100" step="0.5" className="form-input w-28" placeholder="Ex: 5"
+                value={form.estimated_gain || ''} onChange={e => setForm({ ...form, estimated_gain: parseFloat(e.target.value) || 0 })} />
+              <p className="text-xs text-gray-500 flex-1">Quantos pontos % de conformidade esta ação vai gerar quando concluída.</p>
             </div>
-
-            {form.principle_codes.length === 0 ? (
-              <p className="text-xs text-brand-600">Selecione os princípios vinculados para calcular o potencial de ganho automaticamente.</p>
-            ) : !gainData ? (
-              <div className="flex items-center gap-2 text-xs text-brand-600">
-                <Loader2 className="w-3 h-3 animate-spin" /> Calculando potencial...
-              </div>
-            ) : gainData.maxGain === 0 ? (
-              <p className="text-xs text-brand-600">Todos os requisitos desses princípios já estão conformes. Ganho potencial: 0%.</p>
-            ) : (
-              <div className="space-y-3">
-                {/* Slider */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-brand-700">Ajuste a estimativa realista</span>
-                    <span className="text-sm font-bold text-brand-700">+{form.estimated_gain.toFixed(1)}%</span>
-                  </div>
-                  <input
-                    type="range" min="0" max={Math.ceil(gainData.maxGain * 10) / 10}
-                    step="0.1" className="w-full"
-                    value={form.estimated_gain}
-                    onChange={e => setForm({ ...form, estimated_gain: parseFloat(e.target.value) })}
-                  />
-                  <div className="flex justify-between text-[10px] text-brand-500 mt-0.5">
-                    <span>0%</span>
-                    <span className="text-brand-400">Potencial máximo: +{gainData.maxGain.toFixed(1)}%</span>
-                  </div>
-                </div>
-
-                {/* Detalhamento por princípio */}
-                <div className="bg-white border border-brand-200 rounded-lg p-3">
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    Requisitos pendentes dos princípios selecionados
-                  </div>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {gainData.breakdown.filter((r: any) => r.gap > 0).slice(0, 10).map((r: any) => (
-                      <div key={r.code} className="flex items-center gap-2 text-[11px]">
-                        <span className="font-mono text-gray-400 w-8 flex-shrink-0">{r.code}</span>
-                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-brand-400 rounded-full" style={{ width: `${r.currentScore}%` }} />
-                        </div>
-                        <span className="text-gray-500 w-10 text-right">{r.currentScore}pts</span>
-                        <span className="text-emerald-600 w-12 text-right font-semibold">+{(r.gap / gainData.totalWeight * 100).toFixed(1)}%</span>
-                      </div>
-                    ))}
-                    {gainData.breakdown.filter((r: any) => r.gap > 0).length > 10 && (
-                      <div className="text-[10px] text-gray-400 text-center pt-1">
-                        +{gainData.breakdown.filter((r: any) => r.gap > 0).length - 10} requisitos adicionais
-                      </div>
-                    )}
-                    {gainData.breakdown.filter((r: any) => r.gap === 0).length > 0 && (
-                      <div className="text-[10px] text-emerald-600 mt-1">
-                        ✓ {gainData.breakdown.filter((r: any) => r.gap === 0).length} requisitos já conformes
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Contexto */}
-                <p className="text-[11px] text-brand-600">
-                  Se esta ação resolver <strong>{form.estimated_gain > 0 ? Math.round((form.estimated_gain / gainData.maxGain) * 100) : 0}%</strong> do potencial identificado,
-                  o score global pode subir de <strong>{'{'}score atual{'}'}</strong> para <strong>{'{'}score atual + {form.estimated_gain.toFixed(1)}%{'}'}</strong>.
-                </p>
-              </div>
-            )}
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
@@ -789,11 +778,16 @@ function ActionCard({ action, onEdit, onComplete }: { action: any; onEdit: () =>
         </div>
       </div>
       <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-        {action.status !== 'completed' && (
+        {action.status === 'pending_review' && (
+          <span className="text-xs text-amber-600 border border-amber-200 bg-amber-50 px-3 py-1.5 rounded-lg font-semibold inline-flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" /> Ag. avaliação HIDROBR
+          </span>
+        )}
+        {!['completed','pending_review'].includes(action.status) && (
           <button
             className="text-xs text-emerald-600 border border-emerald-200 hover:bg-emerald-50 px-3 py-1.5 rounded-lg font-semibold transition-colors inline-flex items-center gap-1.5"
             onClick={onComplete}>
-            <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
+            <CheckCircle2 className="w-3.5 h-3.5" /> {hb ? 'Concluir' : 'Solicitar avaliação'}
           </button>
         )}
         <button className="text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg font-semibold transition-colors" onClick={onEdit}>✏️ Editar</button>
@@ -955,8 +949,16 @@ export function ActionPlanPage() {
         <ActionModal defaultOrgId={orgId} item={Object.keys(modal).length > 0 ? modal : undefined} onClose={() => setModal(null)} />
       )}
 
-      {completing && cycleForReassess && (
+      {completing && cycleForReassess && hb && (
         <ReassessmentModal
+          action={completing}
+          cycleId={cycleForReassess}
+          onClose={() => setCompleting(null)}
+          onComplete={() => setCompleting(null)}
+        />
+      )}
+      {completing && cycleForReassess && !hb && (
+        <ClientConcludeModal
           action={completing}
           cycleId={cycleForReassess}
           onClose={() => setCompleting(null)}
