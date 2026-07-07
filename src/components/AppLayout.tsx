@@ -1,12 +1,12 @@
 // src/components/AppLayout.tsx
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
-import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Shield, Settings, Users } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Shield, Settings, Users, Inbox } from 'lucide-react'
 
 const NAV = [
   { section: 'Principal', items: [
     { to: '/dashboard',    label: 'Dashboard',         icon: LayoutDashboard },
-    { to: '/requirements', label: 'Requisitos',        icon: ClipboardList },
+    { to: '/requirements', label: 'Requisitos GISTM',  icon: ClipboardList },
     { to: '/evidences',    label: 'Evidências',        icon: Paperclip },
     { to: '/action-plan',  label: 'Plano de Ação',     icon: CheckSquare },
   ]},
@@ -14,9 +14,10 @@ const NAV = [
     { to: '/academy', label: 'HBR Academy', icon: GraduationCap },
   ]},
   { section: 'Gestão', items: [
-    { to: '/clients',            label: 'Portfólio de Clientes', icon: Building2, hidrOnly: true },
-    { to: '/hidrobr-team',       label: 'Equipe HIDROBR',        icon: Users,     adminOnly: true },
-    { to: '/standards-settings', label: 'Config. Padrões',       icon: Settings,  adminOnly: true },
+    { to: '/clients',            label: 'Portfólio de Clientes', icon: Building2,  hidrOnly: true },
+    { to: '/leads',              label: 'Leads — Self Assessment', icon: Inbox,    adminOnly: true },
+    { to: '/hidrobr-team',       label: 'Equipe HIDROBR',        icon: Users,      adminOnly: true },
+    { to: '/standards-settings', label: 'Config. Padrões',       icon: Settings,   adminOnly: true },
     { to: '/notifications',      label: 'Notificações',          icon: Bell },
   ]},
 ]
@@ -46,8 +47,8 @@ export function AppLayout() {
             <div key={section.section} className="mb-1">
               <div className="text-[10px] text-white/30 uppercase tracking-wider px-4 py-2 mt-1">{section.section}</div>
               {section.items.filter(item => {
-                if('hidrOnly' in item && item.hidrOnly && !hb) return false
-                if('adminOnly' in item && item.adminOnly && !isAdmin) return false
+                if ('hidrOnly' in item && item.hidrOnly && !hb) return false
+                if ('adminOnly' in item && item.adminOnly && !isAdmin) return false
                 return true
               }).map(item => {
                 const Icon = item.icon
@@ -77,7 +78,7 @@ export function AppLayout() {
       </aside>
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="h-[60px] bg-white border-b border-gray-200 flex items-center px-6 gap-4 flex-shrink-0">
-          <div className="flex-1"><span className="text-sm text-gray-400">{profile?.organization?.name??(hb?'HIDROBR Soluções Integradas':'')}</span></div>
+          <div className="flex-1"><span className="text-sm text-gray-400">{(profile as any)?.organization?.name??(hb?'HIDROBR Soluções Integradas':'')}</span></div>
           <button onClick={()=>navigate('/notifications')} className="relative w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><Bell className="w-4 h-4"/></button>
         </header>
         <main className="flex-1 overflow-y-auto"><Outlet/></main>

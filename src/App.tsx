@@ -14,6 +14,8 @@ import { ClientsPage } from '@/features/clients/ClientsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { StandardsSettingsPage } from '@/features/settings/StandardsSettingsPage'
 import { HidrobrTeamPage } from '@/features/team/HidrobrTeamPage'
+import { LeadsPage } from '@/features/leads/LeadsPage'
+import { PublicAssessmentPage } from '@/features/assessment/PublicAssessmentPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
@@ -47,6 +49,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Rota pública — sem login */}
+        <Route path="/assessment" element={<PublicAssessmentPage />} />
+
+        {/* Rotas autenticadas */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<RequireAuth><AppLayout /></RequireAuth>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
@@ -56,6 +62,7 @@ export default function App() {
           <Route path="action-plan" element={<ActionPlanPage />} />
           <Route path="academy" element={<AcademyPage />} />
           <Route path="clients" element={<ClientsPage />} />
+          <Route path="leads" element={<LeadsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="standards-settings" element={<StandardsSettingsPage />} />
           <Route path="hidrobr-team" element={<HidrobrTeamPage />} />
