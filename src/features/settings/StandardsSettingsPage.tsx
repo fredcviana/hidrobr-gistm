@@ -128,19 +128,47 @@ function GistmTab() {
   const qc = useQueryClient()
   const [topicFilter, setTopicFilter] = useState<number | null>(null)
 
+  const TOPIC_COLORS: Record<string,string> = {
+    T1:'#1B4F72', T2:'#117A65', T3:'#7D6608', T4:'#6E2F1A', T5:'#922B21', T6:'#1A5276'
+  }
+
   const { data: topics } = useQuery({
     queryKey: ['gistm-topics-settings'],
-    queryFn: async () => { const { data } = await supabase.from('gistm_topics').select('*').order('display_order'); return data ?? [] },
+    queryFn: async () => {
+      const { data } = await supabase.from('gistm_topics').select('*').order('display_order')
+      return data ?? []
+    },
   })
 
-  const { data: reqs, isLoading } = useQuery({
-    queryKey: ['gistm-reqs-settings', topicFilter],
+  const { data: principles, isLoading } = useQuery({
+    queryKey: ['gistm-principles-settings', topicFilter],
     queryFn: async () => {
-      let q = supabase.from('gistm_requirements').select('*, gistm_topics(code,title,color_hex)').order('display_order')
+      let q = supabase.from('gistm_principles').select('*').order('display_order')
       if (topicFilter) q = q.eq('topic_id', topicFilter)
       const { data } = await q
-      return (data ?? []).map((r: any) => ({ ...r, _table: 'gistm_requirements' }))
+      return data ?? []
     },
+  })
+
+  const { data: requirements } = useQuery({
+    queryKey: ['gistm-reqs-settings', topicFilter],
+    queryFn: async () => {
+      let q = supabase.from('gistm_requirements').select('*').order('display_order')
+      if (topicFilter) {
+        const { data: pids } = await supabase.from('gistm_principles')
+          .select('id').eq('topic_id', topicFilter)
+        if (pids?.length) q = q.in('principle_id', pids.map((p:any) => p.id))
+      }
+      const { data } = await q
+      return data ?? []
+    },
+  })
+
+  const topicMap = new Map((topics ?? []).map((t:any) => [t.id, t]))
+  const reqsByPrinciple = new Map<number, any[]>()
+  ;(requirements ?? []).forEach((r:any) => {
+    if (!reqsByPrinciple.has(r.principle_id)) reqsByPrinciple.set(r.principle_id, [])
+    reqsByPrinciple.get(r.principle_id)!.push(r)
   })
 
   return (
@@ -148,7 +176,7 @@ function GistmTab() {
       <div className="flex gap-2 flex-wrap mb-5">
         <button onClick={() => setTopicFilter(null)}
           className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${!topicFilter ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-gray-600 border-gray-200'}`}>
-          Todos (18)
+          Todos (15 princípios)
         </button>
         {(topics ?? []).map((t: any) => (
           <button key={t.id} onClick={() => setTopicFilter(t.id)}
@@ -161,11 +189,36 @@ function GistmTab() {
       {isLoading ? (
         <div className="flex items-center gap-3 text-gray-500"><Loader2 className="w-5 h-5 animate-spin text-brand-400" /><span className="text-sm">Carregando...</span></div>
       ) : (
-        (reqs ?? []).map((req: any) => (
-          <RequirementEditor key={req.id} req={req}
-            topicColor={req.gistm_topics?.color_hex ?? '#0A9396'}
-            onSaved={() => qc.invalidateQueries({ queryKey: ['gistm-reqs-settings'] })} />
-        ))
+        (principles ?? []).map((principle: any) => {
+          const topic = topicMap.get(principle.topic_id)
+          const color = topic?.color_hex ?? '#0A9396'
+          const pReqs = reqsByPrinciple.get(principle.id) ?? []
+          return (
+            <div key={principle.id} className="mb-4">
+              {/* Princípio header */}
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl mb-2"
+                style={{ background: color + '12', borderLeft: `3px solid ${color}`, borderRadius: '0 8px 8px 0' }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black"
+                  style={{ background: color + '25', color }}>
+                  {principle.number}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-800 line-clamp-1">{principle.title}</p>
+                  <p className="text-[10px] text-gray-400">{pReqs.length} requisitos</p>
+                </div>
+              </div>
+              {/* Requisitos do princípio */}
+              {pReqs.map((req: any) => (
+                <RequirementEditor key={req.id} req={{ ...req, _table: 'gistm_requirements' }}
+                  topicColor={color}
+                  onSaved={() => {
+                    qc.invalidateQueries({ queryKey: ['gistm-reqs-settings'] })
+                    qc.invalidateQueries({ queryKey: ['gistm-principles-settings'] })
+                  }} />
+              ))}
+            </div>
+          )
+        })
       )}
     </div>
   )
@@ -270,10 +323,11 @@ export function StandardsSettingsPage() {
       {/* Tabs GISTM / TSM */}
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-6 w-fit">
         {[
-          { id: 'gistm', label: '🏔️  GISTM', sub: '18 princípios · UNEP/PRI/ICMM' },
+          { id: 'gistm', label: '🏔️  GISTM', sub: '15 princípios · UNEP/PRI/ICMM' },
           { id: 'tsm', label: '🌱  TSM', sub: '18 requisitos · Mining Association of Canada' },
+          { id: 'assessment', label: '📋  Self Assessment', sub: 'Formulário público de captação' },
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as 'gistm' | 'tsm')}
+          <button key={tab.id} onClick={() => setActiveTab(tab.id as 'gistm' | 'tsm' | 'assessment')}
             className={`px-5 py-2.5 rounded-lg transition-all text-left ${activeTab === tab.id ? 'bg-white shadow-sm' : 'hover:bg-gray-200/50'}`}>
             <div className={`text-sm font-bold ${activeTab === tab.id ? 'text-brand-700' : 'text-gray-500'}`}>{tab.label}</div>
             <div className="text-[10px] text-gray-400 mt-0.5">{tab.sub}</div>
