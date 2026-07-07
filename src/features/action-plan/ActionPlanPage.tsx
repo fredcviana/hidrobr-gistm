@@ -451,6 +451,73 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
     },
   })
 
+  // Busca ciclo ativo da organização para calcular potencial de ganho
+  const { data: gainData } = useQuery({
+    queryKey: ['gain-potential', form.organization_id, form.principle_codes],
+    enabled: !!form.organization_id && form.principle_codes.length > 0,
+    queryFn: async () => {
+      // Busca ciclo ativo da organização
+      const { data: cycles } = await supabase.from('assessment_cycles')
+        .select('id').eq('organization_id', form.organization_id).eq('status', 'active').limit(1)
+      const cycleId = cycles?.[0]?.id
+      if (!cycleId) return { maxGain: 0, breakdown: [], totalWeight: 0 }
+
+      // Busca princípios pelos códigos selecionados
+      const { data: principles } = await supabase.from('gistm_principles')
+        .select('id, code, number').in('code', form.principle_codes.filter((c: string) => !c.startsWith('TSM')))
+      if (!principles?.length) return { maxGain: 0, breakdown: [], totalWeight: 0 }
+
+      // Busca requisitos desses princípios
+      const { data: reqs } = await supabase.from('gistm_requirements')
+        .select('id, code, weight, principle_id').in('principle_id', principles.map((p: any) => p.id))
+
+      // Busca respostas e avaliações existentes no ciclo
+      const reqIds = (reqs ?? []).map((r: any) => r.id)
+      const { data: responses } = reqIds.length > 0
+        ? await supabase.from('requirement_responses')
+            .select('id, requirement_id, status').eq('cycle_id', cycleId).in('requirement_id', reqIds)
+        : { data: [] }
+      const { data: assessments } = (responses ?? []).length > 0
+        ? await supabase.from('hidrobr_assessments')
+            .select('response_id, score_value').in('response_id', (responses ?? []).map((r: any) => r.id))
+        : { data: [] }
+
+      // Busca peso total de todos os 77 requisitos (denominador do score)
+      const { data: allReqs } = await supabase.from('gistm_requirements').select('weight')
+      const totalWeight = (allReqs ?? []).reduce((s: number, r: any) => s + (Number(r.weight) || 1), 0)
+
+      // Calcula ganho potencial por requisito
+      const respMap = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
+      const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
+      const principleMap = new Map((principles ?? []).map((p: any) => [p.id, p]))
+
+      let maxGainPoints = 0
+      const breakdown: any[] = []
+
+      ;(reqs ?? []).forEach((req: any) => {
+        const w = Number(req.weight) || 1
+        const resp = respMap.get(req.id)
+        const currentScore = resp ? (assessMap.get(resp.id)?.score_value ?? 0) : 0
+        const gap = (100 - currentScore) * w // pontos que faltam, ponderados
+        maxGainPoints += gap
+        const principle = principleMap.get(req.principle_id)
+        breakdown.push({
+          code: req.code,
+          principleCode: principle?.code ?? '',
+          currentScore,
+          weight: w,
+          gap: Math.round(gap),
+          status: resp?.status ?? 'not_started',
+        })
+      })
+
+      // Converte para % do score global
+      const maxGain = totalWeight > 0 ? Math.round((maxGainPoints / totalWeight) * 100) / 100 : 0
+
+      return { maxGain: Math.min(100, maxGain), breakdown, totalWeight }
+    },
+  })
+
   function toggleFacility(id: string) {
     setForm(f => ({
       ...f,
@@ -573,13 +640,83 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
             <label className="form-label">Princípios/Requisitos vinculados <span className="text-gray-400 font-normal">(GISTM e/ou TSM)</span></label>
             <PrincipleSelector value={form.principle_codes} onChange={v => setForm({ ...form, principle_codes: v })} />
           </div>
-          <div>
-            <label className="form-label">Ganho estimado de aderência <span className="text-gray-400 font-normal">(pontos % ao concluir)</span></label>
-            <div className="flex items-center gap-3">
-              <input type="number" min="0" max="100" step="0.5" className="form-input w-28" placeholder="Ex: 5"
-                value={form.estimated_gain || ''} onChange={e => setForm({ ...form, estimated_gain: parseFloat(e.target.value) || 0 })} />
-              <p className="text-xs text-gray-500 flex-1">Quantos pontos % de conformidade esta ação vai gerar quando concluída.</p>
+          {/* Calculadora de ganho */}
+          <div className="border border-brand-200 rounded-xl p-4 bg-brand-50">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-[10px] font-bold text-brand-700 uppercase tracking-wider">
+                Ganho estimado de aderência
+              </label>
+              {gainData && gainData.maxGain > 0 && (
+                <span className="text-[10px] font-semibold text-brand-600 bg-white border border-brand-200 px-2 py-0.5 rounded-full">
+                  Potencial máximo: +{gainData.maxGain.toFixed(1)}%
+                </span>
+              )}
             </div>
+
+            {form.principle_codes.length === 0 ? (
+              <p className="text-xs text-brand-600">Selecione os princípios vinculados para calcular o potencial de ganho automaticamente.</p>
+            ) : !gainData ? (
+              <div className="flex items-center gap-2 text-xs text-brand-600">
+                <Loader2 className="w-3 h-3 animate-spin" /> Calculando potencial...
+              </div>
+            ) : gainData.maxGain === 0 ? (
+              <p className="text-xs text-brand-600">Todos os requisitos desses princípios já estão conformes. Ganho potencial: 0%.</p>
+            ) : (
+              <div className="space-y-3">
+                {/* Slider */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-brand-700">Ajuste a estimativa realista</span>
+                    <span className="text-sm font-bold text-brand-700">+{form.estimated_gain.toFixed(1)}%</span>
+                  </div>
+                  <input
+                    type="range" min="0" max={Math.ceil(gainData.maxGain * 10) / 10}
+                    step="0.1" className="w-full"
+                    value={form.estimated_gain}
+                    onChange={e => setForm({ ...form, estimated_gain: parseFloat(e.target.value) })}
+                  />
+                  <div className="flex justify-between text-[10px] text-brand-500 mt-0.5">
+                    <span>0%</span>
+                    <span className="text-brand-400">Potencial máximo: +{gainData.maxGain.toFixed(1)}%</span>
+                  </div>
+                </div>
+
+                {/* Detalhamento por princípio */}
+                <div className="bg-white border border-brand-200 rounded-lg p-3">
+                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    Requisitos pendentes dos princípios selecionados
+                  </div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {gainData.breakdown.filter((r: any) => r.gap > 0).slice(0, 10).map((r: any) => (
+                      <div key={r.code} className="flex items-center gap-2 text-[11px]">
+                        <span className="font-mono text-gray-400 w-8 flex-shrink-0">{r.code}</span>
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-brand-400 rounded-full" style={{ width: `${r.currentScore}%` }} />
+                        </div>
+                        <span className="text-gray-500 w-10 text-right">{r.currentScore}pts</span>
+                        <span className="text-emerald-600 w-12 text-right font-semibold">+{(r.gap / gainData.totalWeight * 100).toFixed(1)}%</span>
+                      </div>
+                    ))}
+                    {gainData.breakdown.filter((r: any) => r.gap > 0).length > 10 && (
+                      <div className="text-[10px] text-gray-400 text-center pt-1">
+                        +{gainData.breakdown.filter((r: any) => r.gap > 0).length - 10} requisitos adicionais
+                      </div>
+                    )}
+                    {gainData.breakdown.filter((r: any) => r.gap === 0).length > 0 && (
+                      <div className="text-[10px] text-emerald-600 mt-1">
+                        ✓ {gainData.breakdown.filter((r: any) => r.gap === 0).length} requisitos já conformes
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Contexto */}
+                <p className="text-[11px] text-brand-600">
+                  Se esta ação resolver <strong>{form.estimated_gain > 0 ? Math.round((form.estimated_gain / gainData.maxGain) * 100) : 0}%</strong> do potencial identificado,
+                  o score global pode subir de <strong>{'{'}score atual{'}'}</strong> para <strong>{'{'}score atual + {form.estimated_gain.toFixed(1)}%{'}'}</strong>.
+                </p>
+              </div>
+            )}
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">

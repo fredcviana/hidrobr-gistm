@@ -1,0 +1,280 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.wrap { padding: 1rem 0; font-family: var(--font-sans); }
+.roles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 1.5rem; }
+.role-card { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.role-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; font-size: 16px; }
+.role-name { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+.role-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+.section { margin-bottom: 1.25rem; }
+.section-title { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; padding-left: 4px; }
+.perm-row { display: grid; grid-template-columns: 180px repeat(4, 1fr); gap: 0; border-bottom: 0.5px solid var(--border); }
+.perm-row:last-child { border-bottom: none; }
+.perm-label { font-size: 12px; color: var(--text-secondary); padding: 7px 4px; display: flex; align-items: center; gap: 6px; }
+.perm-label i { font-size: 13px; color: var(--text-muted); }
+.perm-cell { display: flex; align-items: center; justify-content: center; padding: 6px 4px; }
+.check { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+.yes   { background: #D1FAE5; color: #065F46; }
+.no    { background: var(--surface-1); color: var(--text-muted); }
+.part  { background: #FEF9C3; color: #713F12; }
+.header-row { display: grid; grid-template-columns: 180px repeat(4, 1fr); gap: 0; margin-bottom: 4px; }
+.col-header { font-size: 10px; font-weight: 500; color: var(--text-muted); text-align: center; padding: 0 4px 6px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<div class="wrap">
+  <div class="roles">
+    <div class="role-card">
+      <div class="role-icon" style="background:#EDE9FE"><i class="ti ti-shield-check" style="font-size:16px;color:#6D28D9" aria-hidden="true"></i></div>
+      <div class="role-name">Admin HIDROBR</div>
+      <div class="role-desc">Acesso total ao sistema, todos os clientes</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon" style="background:#DBEAFE"><i class="ti ti-user-check" style="font-size:16px;color:#1D4ED8" aria-hidden="true"></i></div>
+      <div class="role-name">Consultor HIDROBR</div>
+      <div class="role-desc">Avalia requisitos dos clientes atribuídos</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon" style="background:#D1FAE5"><i class="ti ti-building" style="font-size:16px;color:#059669" aria-hidden="true"></i></div>
+      <div class="role-name">Admin Cliente</div>
+      <div class="role-desc">Gerencia sua organização e usuários</div>
+    </div>
+    <div class="role-card">
+      <div class="role-icon" style="background:#F3F4F6"><i class="ti ti-user" style="font-size:16px;color:#6B7280" aria-hidden="true"></i></div>
+      <div class="role-name">Usuário Cliente</div>
+      <div class="role-desc">Preenche respostas e envia evidências</div>
+    </div>
+  </div>
+
+  <div class="header-row">
+    <div></div>
+    <div class="col-header"><span class="dot" style="background:#7C3AED"></span>Admin HB</div>
+    <div class="col-header"><span class="dot" style="background:#2563EB"></span>Consultor</div>
+    <div class="col-header"><span class="dot" style="background:#059669"></span>Adm. Cliente</div>
+    <div class="col-header"><span class="dot" style="background:#6B7280"></span>Usuário</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard</div>
+    <div style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-eye" aria-hidden="true"></i>Ver dashboard própria org</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-eye" aria-hidden="true"></i>Ver dashboard todos os clientes</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><i class="ti ti-clipboard-list" aria-hidden="true"></i> Requisitos GISTM</div>
+    <div style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-eye" aria-hidden="true"></i>Visualizar requisitos</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-edit" aria-hidden="true"></i>Preencher respostas</div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-send" aria-hidden="true"></i>Solicitar avaliação</div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-star" aria-hidden="true"></i>Publicar avaliação HIDROBR</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-eye" aria-hidden="true"></i>Ver avaliações de todos os clientes</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><i class="ti ti-paperclip" aria-hidden="true"></i> Evidências</div>
+    <div style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-upload" aria-hidden="true"></i>Enviar evidências</div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-download" aria-hidden="true"></i>Baixar evidências</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-check" aria-hidden="true"></i>Validar / invalidar evidências</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-trash" aria-hidden="true"></i>Excluir evidências</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check part">*</div></div>
+        <div class="perm-cell"><div class="check part">*</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><i class="ti ti-check-square" aria-hidden="true"></i> Plano de ação</div>
+    <div style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-eye" aria-hidden="true"></i>Visualizar ações</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-plus" aria-hidden="true"></i>Criar / editar ações</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-check" aria-hidden="true"></i>Concluir ação + reavaliar</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><i class="ti ti-building" aria-hidden="true"></i> Portfólio de clientes</div>
+    <div style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-eye" aria-hidden="true"></i>Ver todos os clientes</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-plus" aria-hidden="true"></i>Criar organização / barragem</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-edit" aria-hidden="true"></i>Editar organização / barragem</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-calendar" aria-hidden="true"></i>Criar / excluir ciclos</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-user-plus" aria-hidden="true"></i>Criar usuários do cliente</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check part">*</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><i class="ti ti-users" aria-hidden="true"></i> Equipe HIDROBR</div>
+    <div style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-eye" aria-hidden="true"></i>Ver equipe</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-user-plus" aria-hidden="true"></i>Criar consultor HIDROBR</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-link" aria-hidden="true"></i>Atribuir ciclos a consultores</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><i class="ti ti-settings" aria-hidden="true"></i> Config. padrões / Academy</div>
+    <div style="background:var(--surface-2);border:0.5px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-edit" aria-hidden="true"></i>Editar requisitos GISTM/TSM</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-book" aria-hidden="true"></i>Acessar HBR Academy</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+      </div>
+      <div class="perm-row">
+        <div class="perm-label"><i class="ti ti-plus" aria-hidden="true"></i>Criar conteúdo Academy</div>
+        <div class="perm-cell"><div class="check yes">✓</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+        <div class="perm-cell"><div class="check no">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:20px; margin-top:4px; font-size:11px; color:var(--text-muted);">
+    <span style="display:flex;align-items:center;gap:6px;"><span class="check yes" style="width:16px;height:16px;font-size:9px">✓</span> Permitido</span>
+    <span style="display:flex;align-items:center;gap:6px;"><span class="check no" style="width:16px;height:16px;font-size:9px">—</span> Não permitido</span>
+    <span style="display:flex;align-items:center;gap:6px;"><span class="check part" style="width:16px;height:16px;font-size:9px">*</span> Parcial — apenas próprios arquivos / própria org</span>
+  </div>
+</div>
