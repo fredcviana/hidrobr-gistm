@@ -136,8 +136,8 @@ function GistmTab() {
     },
   })
 
-  const { data: reqs, isLoading } = useQuery({
-    queryKey: ['gistm-reqs-settings', topicFilter],
+  const { data: requirements, isLoading } = useQuery({
+    queryKey: ['gistm-req-edit', topicFilter],
     queryFn: async () => {
       let q = supabase.from('gistm_requirements')
         .select('*, gistm_topics(code, title, color_hex)')
@@ -147,6 +147,10 @@ function GistmTab() {
       return (data ?? []).map((r: any) => ({ ...r, _table: 'gistm_requirements' }))
     },
   })
+
+  const filtered = topicFilter
+    ? (requirements ?? []).filter((r: any) => r.topic_id === topicFilter)
+    : (requirements ?? [])
 
   return (
     <div>
@@ -158,23 +162,23 @@ function GistmTab() {
         {(topics ?? []).map((t: any) => (
           <button key={t.id} onClick={() => setTopicFilter(t.id)}
             className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${topicFilter === t.id ? 'text-white border-transparent' : 'bg-white text-gray-600 border-gray-200'}`}
-            style={topicFilter === t.id ? { background: t.color_hex } : {}}>
-            {t.code}
+            style={topicFilter === t.id ? { background: t.color_hex, borderColor: t.color_hex } : {}}>
+            {t.code} — {t.title?.split(',')[0]?.split('&')[0]?.trim()}
           </button>
         ))}
       </div>
       {isLoading ? (
         <div className="flex items-center gap-3 text-gray-500">
           <Loader2 className="w-5 h-5 animate-spin text-brand-400" />
-          <span className="text-sm">Carregando...</span>
+          <span className="text-sm">Carregando requisitos...</span>
         </div>
       ) : (
-        (reqs ?? []).map((req: any) => (
+        filtered.map((req: any) => (
           <RequirementEditor
             key={req.id}
             req={req}
             topicColor={req.gistm_topics?.color_hex ?? '#0A9396'}
-            onSaved={() => qc.invalidateQueries({ queryKey: ['gistm-reqs-settings'] })}
+            onSaved={() => qc.invalidateQueries({ queryKey: ['gistm-req-edit'] })}
           />
         ))
       )}
