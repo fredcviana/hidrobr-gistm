@@ -56,12 +56,26 @@ export function EvidencesPage() {
     queryKey: ['responses-for-evidences', activeCycleId],
     enabled: !!activeCycleId,
     queryFn: async () => {
-      const { data } = await supabase
+      // Busca respostas e depois os requisitos separadamente
+      const { data: respData } = await supabase
         .from('requirement_responses')
-        .select('id, requirement_id, gistm_requirements(code, description)')
+        .select('id, requirement_id, status')
         .eq('cycle_id', activeCycleId)
         .order('created_at', { ascending: true })
-      return data ?? []
+      if (!respData?.length) return []
+      
+      // Busca requisitos pelos IDs
+      const reqIds = respData.map((r: any) => r.requirement_id)
+      const { data: reqData } = await supabase
+        .from('gistm_requirements')
+        .select('id, code, description')
+        .in('id', reqIds)
+      const reqMap = new Map((reqData ?? []).map((r: any) => [r.id, r]))
+      
+      return respData.map((r: any) => ({
+        ...r,
+        gistm_requirements: reqMap.get(r.requirement_id) ?? null,
+      }))
     },
   })
 
@@ -72,13 +86,22 @@ export function EvidencesPage() {
     queryFn: async () => {
       const responseIds = responses?.map((r: any) => r.id) ?? []
       if (responseIds.length === 0) return []
+      
+      // Busca evidências com o perfil do uploader
       let q = supabase.from('evidences')
-        .select('*, profiles(full_name), requirement_responses(id, requirement_id, gistm_requirements(code, description))')
+        .select('*, profiles(full_name)')
         .in('response_id', responseIds)
         .order('created_at', { ascending: false })
       if (selectedResponse) q = q.eq('response_id', selectedResponse)
-      const { data } = await q
-      return data ?? []
+      const { data: evData } = await q
+      if (!evData?.length) return []
+      
+      // Combina com dados dos requisitos já carregados em responses
+      const respMap = new Map((responses ?? []).map((r: any) => [r.id, r]))
+      return evData.map((ev: any) => ({
+        ...ev,
+        requirement_responses: respMap.get(ev.response_id) ?? null,
+      }))
     },
   })
 
