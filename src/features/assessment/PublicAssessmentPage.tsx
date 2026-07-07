@@ -2,7 +2,7 @@
 // Formulário público — carrega configuração do banco (editável pelo admin)
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, ChevronLeft, CheckCircle2, Loader2, Download, AlertCircle } from 'lucide-react'
+import { Shield, ChevronRight, ChevronLeft, CheckCircle2, Loader2, Download, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 const TOPIC_META: Record<string, { title: string; color: string; icon: string }> = {
@@ -71,6 +71,7 @@ export function PublicAssessmentPage() {
   const [step, setStep] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [benchmark, setBenchmark] = useState<{ sectorAvg: number | null; sectorCount: number; globalAvg: number | null; globalCount: number } | null>(null)
   const [lead, setLead] = useState({
     company_name: '', contact_name: '', contact_email: '',
     contact_phone: '', contact_role: '', segment: '', dam_name: '', dam_count: '1', state: '',
@@ -157,6 +158,42 @@ export function PublicAssessmentPage() {
         status: 'new',
       })
       if (dbErr) throw dbErr
+
+      // Busca benchmark do setor
+      try {
+        // Média do mesmo segmento
+        const segment = lead.segment || null
+        let sectorAvg = null, sectorCount = 0, globalAvg = null, globalCount = 0
+
+        const { data: allLeads } = await supabase
+          .from('public_assessments')
+          .select('overall_score, segment')
+          .eq('status', 'new')
+          .not('overall_score', 'is', null)
+
+        if (allLeads && allLeads.length > 0) {
+          const sectorLeads = segment
+            ? allLeads.filter((l: any) => l.segment === segment)
+            : []
+
+          if (sectorLeads.length >= 3) {
+            sectorAvg = Math.round(
+              sectorLeads.reduce((s: number, l: any) => s + Number(l.overall_score), 0) / sectorLeads.length
+            )
+            sectorCount = sectorLeads.length
+          }
+
+          globalAvg = Math.round(
+            allLeads.reduce((s: number, l: any) => s + Number(l.overall_score), 0) / allLeads.length
+          )
+          globalCount = allLeads.length
+        }
+
+        setBenchmark({ sectorAvg, sectorCount, globalAvg, globalCount })
+      } catch (_) {
+        // Benchmark é opcional — não bloqueia o resultado
+      }
+
       setStep(totalSteps)
     } catch (e: any) {
       setError(e.message ?? 'Erro ao enviar. Tente novamente.')
@@ -176,8 +213,11 @@ export function PublicAssessmentPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-[#002B3D] text-white py-4 px-6 flex items-center gap-3 print:hidden">
-        <img src="/logo.png" alt="HIDROBR" className="h-8 w-auto flex-shrink-0" />
+        <div className="w-8 h-8 rounded-lg bg-[#0A9396] flex items-center justify-center flex-shrink-0">
+          <Shield className="w-4 h-4 text-white" />
+        </div>
         <div>
+          <div className="text-sm font-bold">HIDROBR</div>
           <div className="text-[10px] text-white/40 uppercase tracking-widest">Self Assessment GISTM</div>
         </div>
         <div className="ml-auto text-xs text-white/40">Padrão Global da Indústria para a Gestão de Rejeitos · UNEP/ICMM/PRI</div>
@@ -195,8 +235,8 @@ export function PublicAssessmentPage() {
         {isDataStep && (
           <div>
             <div className="text-center mb-8">
-              <div className="flex justify-center mb-4">
-                <img src="/logo.png" alt="HIDROBR" className="h-16 w-auto" />
+              <div className="w-16 h-16 rounded-2xl bg-[#002B3D] flex items-center justify-center mx-auto mb-4">
+                <Shield className="w-8 h-8 text-[#0A9396]" />
               </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">{cfg?.form_title ?? 'Avalie sua conformidade ao GISTM'}</h1>
               <p className="text-gray-500 text-sm max-w-md mx-auto">{cfg?.form_subtitle}</p>
@@ -309,13 +349,91 @@ export function PublicAssessmentPage() {
               <div className="text-xl font-bold mb-0.5">{lead.company_name}</div>
               <div className="text-sm text-white/60">{lead.dam_name} · {new Date().toLocaleDateString('pt-BR')}</div>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-4 text-center">
-              <div className="text-sm text-gray-500 mb-2">Nível de conformidade estimado</div>
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-4">
+              <div className="text-sm text-gray-500 mb-2 text-center">Nível de conformidade estimado</div>
               <Gauge value={score} size="lg" />
-              <div className="text-lg font-bold mt-1" style={{ color: scoreColor }}>{scoreLabel}</div>
-              <p className="text-xs text-gray-400 mt-2 max-w-sm mx-auto">
+              <div className="text-lg font-bold mt-1 text-center" style={{ color: scoreColor }}>{scoreLabel}</div>
+              <p className="text-xs text-gray-400 mt-2 max-w-sm mx-auto text-center">
                 Score baseado em {Object.keys(answers).length} princípios avaliados de {allPrinciples.length} totais
               </p>
+
+              {/* Benchmark do setor */}
+              {benchmark && (benchmark.sectorAvg !== null || benchmark.globalAvg !== null) && (
+                <div className="mt-5 pt-4 border-t border-gray-100">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center mb-3">
+                    Comparativo com outras empresas
+                  </div>
+                  <div className={`grid gap-3 ${benchmark.sectorAvg !== null ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    {/* Média do setor */}
+                    {benchmark.sectorAvg !== null && (
+                      <div className="bg-blue-50 rounded-xl p-3 text-center">
+                        <div className="text-[10px] text-blue-600 font-semibold mb-1 uppercase tracking-wider">
+                          Média do setor
+                        </div>
+                        <div className="text-xs text-blue-500 mb-2">{lead.segment}</div>
+                        <div className="relative h-2 bg-blue-100 rounded-full mb-2 overflow-hidden">
+                          <div className="h-full rounded-full bg-blue-400" style={{ width: `${benchmark.sectorAvg}%` }} />
+                          <div className="absolute top-0 h-full w-0.5 bg-blue-700"
+                            style={{ left: `${score}%`, transform: 'translateX(-50%)' }} />
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-2xl font-extrabold text-blue-700">{benchmark.sectorAvg}%</span>
+                          {score > benchmark.sectorAvg ? (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                              +{score - benchmark.sectorAvg}pts acima
+                            </span>
+                          ) : score < benchmark.sectorAvg ? (
+                            <span className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+                              {score - benchmark.sectorAvg}pts abaixo
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                              Na média
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-blue-400 mt-1">
+                          base: {benchmark.sectorCount} empresa{benchmark.sectorCount !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    )}
+                    {/* Média geral */}
+                    {benchmark.globalAvg !== null && (
+                      <div className="bg-gray-50 rounded-xl p-3 text-center">
+                        <div className="text-[10px] text-gray-500 font-semibold mb-1 uppercase tracking-wider">
+                          Média geral
+                        </div>
+                        <div className="text-xs text-gray-400 mb-2">Todos os segmentos</div>
+                        <div className="relative h-2 bg-gray-200 rounded-full mb-2 overflow-hidden">
+                          <div className="h-full rounded-full bg-gray-400" style={{ width: `${benchmark.globalAvg}%` }} />
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-2xl font-extrabold text-gray-700">{benchmark.globalAvg}%</span>
+                          {score > benchmark.globalAvg ? (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                              +{score - benchmark.globalAvg}pts acima
+                            </span>
+                          ) : score < benchmark.globalAvg ? (
+                            <span className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+                              {score - benchmark.globalAvg}pts abaixo
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                              Na média
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-gray-400 mt-1">
+                          base: {benchmark.globalCount} empresa{benchmark.globalCount !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-gray-400 text-center mt-2">
+                    * Dados anônimos de empresas que realizaram este diagnóstico
+                  </p>
+                </div>
+              )}
             </div>
             <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-4">
               <h3 className="text-sm font-bold text-gray-900 mb-4">Resultado por tópico</h3>

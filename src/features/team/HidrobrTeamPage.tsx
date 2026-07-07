@@ -117,6 +117,86 @@ function ConsultantClients({ consultantId, consultantName }: { consultantId: str
   )
 }
 
+// ── Modal de edição do membro ────────────────────────────────
+function TeamMemberModal({ member, onClose }: { member: any; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({
+    full_name: member.full_name ?? '',
+    job_title: member.job_title ?? '',
+    phone: member.phone ?? '',
+    role: member.role ?? 'hidrobr_consultant',
+  })
+  const [error, setError] = useState('')
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!form.full_name.trim()) throw new Error('Nome obrigatório')
+      const { error } = await supabase.from('profiles').update({
+        full_name: form.full_name.trim(),
+        job_title: form.job_title.trim() || null,
+        phone: form.phone.trim() || null,
+        role: form.role,
+        updated_at: new Date().toISOString(),
+      }).eq('id', member.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hidrobr-team'] })
+      onClose()
+    },
+    onError: (e: any) => setError(e.message ?? 'Erro ao salvar'),
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h2 className="text-base font-bold text-gray-900">Editar membro</h2>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>}
+          <div>
+            <label className="form-label">Nome completo *</label>
+            <input className="form-input" value={form.full_name}
+              onChange={e => setForm({ ...form, full_name: e.target.value })} />
+          </div>
+          <div>
+            <label className="form-label">Cargo</label>
+            <input className="form-input" placeholder="Ex: Consultor Sênior"
+              value={form.job_title} onChange={e => setForm({ ...form, job_title: e.target.value })} />
+          </div>
+          <div>
+            <label className="form-label">Telefone</label>
+            <input className="form-input" placeholder="+55 31 99999-0000"
+              value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+          </div>
+          <div>
+            <label className="form-label">Perfil</label>
+            <select className="form-input" value={form.role}
+              onChange={e => setForm({ ...form, role: e.target.value })}>
+              <option value="hidrobr_consultant">Consultor</option>
+              <option value="hidrobr_admin">Administrador</option>
+            </select>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', background: mut.isPending ? '#9CA3AF' : '#002B3D', color: 'white', border: 'none', cursor: mut.isPending ? 'not-allowed' : 'pointer' }}
+            onClick={() => mut.mutate()} disabled={mut.isPending}>
+            {mut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Salvar alterações
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Card do membro ────────────────────────────────────────────
 function TeamMemberCard({ member }: { member: any }) {
   const qc = useQueryClient()
