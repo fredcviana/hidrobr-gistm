@@ -530,15 +530,32 @@ export function RequirementsPage() {
     queryKey: ['requirements-v3', cycleId],
     enabled: !!cycleId,
     queryFn: async () => {
-      const [{ data: topics }, { data: principles }, { data: requirements }, { data: responses }] = await Promise.all([
-        supabase.from('gistm_topics').select('*').order('display_order'),
-        supabase.from('gistm_principles').select('*').order('display_order'),
-        supabase.from('gistm_requirements').select('*').order('display_order'),
-      supabase.from('requirement_responses')
-  .select('*, hidrobr_assessments(id,score,score_value,assessment_text,recommendations,published_at)')
-  .eq('cycle_id', cycleId),
-      ])
-      return { topics: topics ?? [], principles: principles ?? [], requirements: requirements ?? [], responses: responses ?? [] }
+      const { data: topics } = await supabase.from('gistm_topics').select('*').order('display_order')
+      const { data: principles } = await supabase.from('gistm_principles').select('*').order('display_order')
+      const { data: requirements } = await supabase.from('gistm_requirements').select('*').order('display_order')
+      const { data: responses } = await supabase.from('requirement_responses').select('*').eq('cycle_id', cycleId)
+
+      // Busca avaliações separadamente (join aninhado não funciona com FK response_id)
+      const responseIds = (responses ?? []).map((r: any) => r.id)
+      const { data: assessments } = responseIds.length > 0
+        ? await supabase.from('hidrobr_assessments')
+            .select('id,response_id,score,score_value,assessment_text,recommendations,published_at')
+            .in('response_id', responseIds)
+        : { data: [] }
+
+      // Combina respostas com avaliações
+      const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
+      const responsesWithAssessments = (responses ?? []).map((r: any) => ({
+        ...r,
+        hidrobr_assessments: assessMap.has(r.id) ? [assessMap.get(r.id)] : [],
+      }))
+
+      return {
+        topics: topics ?? [],
+        principles: principles ?? [],
+        requirements: requirements ?? [],
+        responses: responsesWithAssessments,
+      }
     },
   })
 
