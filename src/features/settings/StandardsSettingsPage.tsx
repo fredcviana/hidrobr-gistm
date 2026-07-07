@@ -126,7 +126,7 @@ function RequirementEditor({ req, topicColor, onSaved }: { req: any; topicColor:
 // ── GISTM Tab ─────────────────────────────────────────────────
 function GistmTab() {
   const qc = useQueryClient()
-  const [topicFilter, setTopicFilter] = useState<number | null>(null)
+  const [topicFilter, setTopicFilter] = useState<string | null>(null)
 
   const { data: topics } = useQuery({
     queryKey: ['gistm-topics-settings'],
@@ -136,24 +136,47 @@ function GistmTab() {
     },
   })
 
-  const { data: requirements, isLoading } = useQuery({
-    queryKey: ['gistm-req-edit', topicFilter],
+  const { data: principles } = useQuery({
+    queryKey: ['gistm-principles-settings'],
     queryFn: async () => {
-      let q = supabase.from('gistm_requirements')
-        .select('*, gistm_topics(code, title, color_hex)')
+      const { data } = await supabase.from('gistm_principles').select('*').order('display_order')
+      return data ?? []
+    },
+  })
+
+  const { data: requirements, isLoading } = useQuery({
+    queryKey: ['gistm-req-edit'],
+    queryFn: async () => {
+      const { data } = await supabase.from('gistm_requirements')
+        .select('*')
         .order('display_order')
-      if (topicFilter) q = q.eq('topic_id', topicFilter)
-      const { data } = await q
       return (data ?? []).map((r: any) => ({ ...r, _table: 'gistm_requirements' }))
     },
   })
 
+  // Monta mapa de princípio → tópico
+  const topicMap = new Map((topics ?? []).map((t: any) => [t.id, t]))
+  const principleMap = new Map((principles ?? []).map((p: any) => [p.id, { ...p, topic: topicMap.get(p.topic_id) }]))
+
+  // Filtra por tópico
   const filtered = topicFilter
-    ? (requirements ?? []).filter((r: any) => r.topic_id === topicFilter)
+    ? (requirements ?? []).filter((r: any) => {
+        const p = principleMap.get(r.principle_id)
+        return p?.topic?.id === topicFilter || p?.topic_id === topicFilter
+      })
     : (requirements ?? [])
+
+  // Agrupa por princípio
+  const byPrinciple = filtered.reduce((acc: any, req: any) => {
+    const pId = req.principle_id
+    if (!acc[pId]) acc[pId] = { principle: principleMap.get(pId), reqs: [] }
+    acc[pId].reqs.push(req)
+    return acc
+  }, {})
 
   return (
     <div>
+      {/* Filtro por tópico */}
       <div className="flex gap-2 flex-wrap mb-5">
         <button onClick={() => setTopicFilter(null)}
           className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${!topicFilter ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-gray-600 border-gray-200'}`}>
@@ -162,25 +185,47 @@ function GistmTab() {
         {(topics ?? []).map((t: any) => (
           <button key={t.id} onClick={() => setTopicFilter(t.id)}
             className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-all ${topicFilter === t.id ? 'text-white border-transparent' : 'bg-white text-gray-600 border-gray-200'}`}
-            style={topicFilter === t.id ? { background: t.color_hex, borderColor: t.color_hex } : {}}>
-            {t.code} — {t.title?.split(',')[0]?.split('&')[0]?.trim()}
+            style={topicFilter === t.id ? { background: t.color_hex } : {}}>
+            {t.code} — {t.title?.split('–')[0]?.trim() ?? t.title}
           </button>
         ))}
       </div>
+
       {isLoading ? (
         <div className="flex items-center gap-3 text-gray-500">
           <Loader2 className="w-5 h-5 animate-spin text-brand-400" />
           <span className="text-sm">Carregando requisitos...</span>
         </div>
       ) : (
-        filtered.map((req: any) => (
-          <RequirementEditor
-            key={req.id}
-            req={req}
-            topicColor={req.gistm_topics?.color_hex ?? '#0A9396'}
-            onSaved={() => qc.invalidateQueries({ queryKey: ['gistm-req-edit'] })}
-          />
-        ))
+        Object.values(byPrinciple).map((group: any) => {
+          const p = group.principle
+          const topicColor = p?.topic?.color_hex ?? '#0A9396'
+          return (
+            <div key={p?.id} className="mb-4">
+              {/* Cabeçalho do princípio */}
+              <div className="flex items-center gap-3 px-3 py-2 mb-2 rounded-lg"
+                style={{ background: topicColor + '12', borderLeft: `3px solid ${topicColor}` }}>
+                <div className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-black flex-shrink-0"
+                  style={{ background: topicColor + '25', color: topicColor }}>
+                  {p?.code ?? 'P'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-800 truncate">{p?.title}</p>
+                  <p className="text-[10px] text-gray-400">{group.reqs.length} requisitos · {p?.topic?.title}</p>
+                </div>
+              </div>
+              {/* Requisitos */}
+              {group.reqs.map((req: any) => (
+                <RequirementEditor
+                  key={req.id}
+                  req={{ ...req, title: req.code, gistm_topics: p?.topic }}
+                  topicColor={topicColor}
+                  onSaved={() => qc.invalidateQueries({ queryKey: ['gistm-req-edit'] })}
+                />
+              ))}
+            </div>
+          )
+        })
       )}
     </div>
   )
@@ -285,10 +330,11 @@ export function StandardsSettingsPage() {
       {/* Tabs GISTM / TSM */}
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-6 w-fit">
         {[
-          { id: 'gistm', label: '🏔️  GISTM', sub: '18 princípios · UNEP/PRI/ICMM' },
+          { id: 'gistm', label: '🏔️  GISTM', sub: '15 princípios · UNEP/PRI/ICMM' },
           { id: 'tsm', label: '🌱  TSM', sub: '18 requisitos · Mining Association of Canada' },
+          { id: 'assessment', label: '📋  Self Assessment', sub: 'Formulário público de captação' },
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as 'gistm' | 'tsm')}
+          <button key={tab.id} onClick={() => setActiveTab(tab.id as 'gistm' | 'tsm' | 'assessment')}
             className={`px-5 py-2.5 rounded-lg transition-all text-left ${activeTab === tab.id ? 'bg-white shadow-sm' : 'hover:bg-gray-200/50'}`}>
             <div className={`text-sm font-bold ${activeTab === tab.id ? 'text-brand-700' : 'text-gray-500'}`}>{tab.label}</div>
             <div className="text-[10px] text-gray-400 mt-0.5">{tab.sub}</div>
