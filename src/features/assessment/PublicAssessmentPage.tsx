@@ -2,7 +2,7 @@
 // Formulário público — carrega configuração do banco (editável pelo admin)
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Shield, ChevronRight, ChevronLeft, CheckCircle2, Loader2, Download, AlertCircle } from 'lucide-react'
+import { ChevronRight, ChevronLeft, CheckCircle2, Loader2, Download, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 const TOPIC_META: Record<string, { title: string; color: string; icon: string }> = {
@@ -213,11 +213,8 @@ export function PublicAssessmentPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-[#002B3D] text-white py-4 px-6 flex items-center gap-3 print:hidden">
-        <div className="w-8 h-8 rounded-lg bg-[#0A9396] flex items-center justify-center flex-shrink-0">
-          <Shield className="w-4 h-4 text-white" />
-        </div>
+        <img src="/logo.png" alt="HIDROBR" className="h-8 w-auto flex-shrink-0" />
         <div>
-          <div className="text-sm font-bold">HIDROBR</div>
           <div className="text-[10px] text-white/40 uppercase tracking-widest">Self Assessment GISTM</div>
         </div>
         <div className="ml-auto text-xs text-white/40">Padrão Global da Indústria para a Gestão de Rejeitos · UNEP/ICMM/PRI</div>
@@ -235,8 +232,8 @@ export function PublicAssessmentPage() {
         {isDataStep && (
           <div>
             <div className="text-center mb-8">
-              <div className="w-16 h-16 rounded-2xl bg-[#002B3D] flex items-center justify-center mx-auto mb-4">
-                <Shield className="w-8 h-8 text-[#0A9396]" />
+              <div className="flex justify-center mb-4">
+                <img src="/logo.png" alt="HIDROBR" className="h-16 w-auto" />
               </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">{cfg?.form_title ?? 'Avalie sua conformidade ao GISTM'}</h1>
               <p className="text-gray-500 text-sm max-w-md mx-auto">{cfg?.form_subtitle}</p>
