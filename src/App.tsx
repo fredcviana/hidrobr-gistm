@@ -15,6 +15,7 @@ import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { StandardsSettingsPage } from '@/features/settings/StandardsSettingsPage'
 import { HidrobrTeamPage } from '@/features/team/HidrobrTeamPage'
 import { LeadsPage } from '@/features/leads/LeadsPage'
+import { TsmRequirementsPage } from '@/features/requirements/TsmRequirementsPage'
 import { PublicAssessmentPage } from '@/features/assessment/PublicAssessmentPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="academy" element={<AcademyPage />} />
           <Route path="clients" element={<ClientsPage />} />
           <Route path="leads" element={<LeadsPage />} />
+          <Route path="requirements-tsm" element={<TsmRequirementsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="standards-settings" element={<StandardsSettingsPage />} />
           <Route path="hidrobr-team" element={<HidrobrTeamPage />} />

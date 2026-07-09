@@ -1,15 +1,15 @@
 // src/components/AppLayout.tsx
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
-import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Settings, Users, Inbox } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Shield, Settings, Users, Inbox } from 'lucide-react'
 
 const NAV = [
   { section: 'Principal', items: [
-    { to: '/dashboard',    label: 'Dashboard',         icon: LayoutDashboard },
-    { to: '/requirements', label: 'Requisitos GISTM',  icon: ClipboardList },
-    { to: '/requirements-tsm', label: 'Requisitos TSM', icon: ClipboardList },
-    { to: '/evidences',    label: 'Evidências',        icon: Paperclip },
-    { to: '/action-plan',  label: 'Plano de Ação',     icon: CheckSquare },
+    { to: '/dashboard',         label: 'Dashboard',         icon: LayoutDashboard },
+    { to: '/requirements',      label: 'Requisitos GISTM',  icon: ClipboardList },
+    { to: '/requirements-tsm',  label: 'Requisitos TSM',    icon: ClipboardList },
+    { to: '/evidences',         label: 'Evidências',        icon: Paperclip },
+    { to: '/action-plan',       label: 'Plano de Ação',     icon: CheckSquare },
   ]},
   { section: 'Capacitação', items: [
     { to: '/academy', label: 'HBR Academy', icon: GraduationCap },
@@ -35,9 +35,12 @@ export function AppLayout() {
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <aside className="w-60 bg-brand-900 flex flex-col flex-shrink-0">
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/8 h-[60px]">
-          <img src="/logo.png" alt="HIDROBR" className="h-8 w-auto flex-shrink-0" />
+          <div className="w-8 h-8 rounded-lg bg-brand-400 flex items-center justify-center flex-shrink-0">
+            <Shield className="w-4 h-4 text-white" />
+          </div>
           <div>
-            <div className="text-[10px] text-white/35 uppercase tracking-widest mt-0.5">Sustainability Manager</div>
+            <div className="text-[13px] font-bold text-white leading-none">HIDROBR</div>
+            <div className="text-[10px] text-white/35 uppercase tracking-widest">Sustainability Manager</div>
           </div>
         </div>
         <nav className="flex-1 overflow-y-auto py-2">
