@@ -7,6 +7,7 @@ const NAV = [
   { section: 'Principal', items: [
     { to: '/dashboard',    label: 'Dashboard',         icon: LayoutDashboard },
     { to: '/requirements', label: 'Requisitos GISTM',  icon: ClipboardList },
+    { to: '/requirements-tsm', label: 'Requisitos TSM', icon: ClipboardList },
     { to: '/evidences',    label: 'Evidências',        icon: Paperclip },
     { to: '/action-plan',  label: 'Plano de Ação',     icon: CheckSquare },
   ]},
