@@ -42,6 +42,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
   const [recommendations, setRecommendations] = useState('')
   const [saving, setSaving] = useState(false)
   const [assessing, setAssessing] = useState(false)
+  const [editingAssessment, setEditingAssessment] = useState(false)
   const [errMsg, setErrMsg] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
 
@@ -162,6 +163,24 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
 
   const scoreOpt = SCORE_OPTIONS.find(s => s.key === assessment?.score)
 
+  function startEditAssessment() {
+    if (assessment) {
+      setScore(assessment.score ?? '')
+      setAssessText(assessment.assessment_text ?? '')
+      setRecommendations(assessment.recommendations ?? '')
+    }
+    setErrMsg('')
+    setEditingAssessment(true)
+  }
+
+  function cancelEditAssessment() {
+    setEditingAssessment(false)
+    setScore('')
+    setAssessText('')
+    setRecommendations('')
+    setErrMsg('')
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-end z-50" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-[620px] h-full bg-white flex flex-col shadow-2xl">
@@ -240,8 +259,19 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
           {tab === 'avaliacao' && (
             <div>
               {/* Avaliação existente */}
-              {hasAssessment && (
+              {hasAssessment && !editingAssessment && (
                 <div className="rounded-xl p-5 border mb-4" style={{ background: scoreOpt?.bg, borderColor: scoreOpt?.color + '40' }}>
+                  {hb && (
+                    <div className="flex justify-end mb-2">
+                      <button
+                        onClick={startEditAssessment}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/70 hover:bg-white transition"
+                        style={{ color: scoreOpt?.color }}
+                      >
+                        ✏️ Revisar avaliação
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: scoreOpt?.color }}>
@@ -266,7 +296,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
               )}
 
               {/* Formulário de nova avaliação */}
-              {hb && !hasAssessment && (
+              {hb && (!hasAssessment || editingAssessment) && (
                 <div className="space-y-4">
                   {!response?.id && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 flex gap-2">
@@ -315,7 +345,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
               )}
 
               {/* Cliente sem avaliação */}
-              {!hb && !hasAssessment && (
+              {!hb && (!hasAssessment || editingAssessment) && (
                 <div className="text-center py-16">
                   <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                   <p className="font-medium text-gray-500">Aguardando avaliação da HIDROBR</p>
@@ -329,7 +359,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
           <div className="text-xs text-gray-400">
-            {tab === 'avaliacao' && hb && !hasAssessment && score && (
+            {tab === 'avaliacao' && hb && (!hasAssessment || editingAssessment) && score && (
               <span>Classificação: <strong>{SCORE_OPTIONS.find(s => s.key === score)?.label}</strong> · {SCORE_OPTIONS.find(s => s.key === score)?.value} pts</span>
             )}
           </div>
@@ -360,7 +390,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
               </>
             )}
 
-            {tab === 'avaliacao' && hb && !hasAssessment && (
+            {tab === 'avaliacao' && hb && (!hasAssessment || editingAssessment) && (
               <button
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -372,8 +402,16 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
                 onClick={handleAssess}
                 disabled={assessing || !score || assessText.trim().length < 20}>
                 {assessing
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Publicando...</>
-                  : <><CheckCircle2 className="w-4 h-4" /> Publicar avaliação</>}
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {editingAssessment ? 'Salvando...' : 'Publicando...'}</>
+                  : <><CheckCircle2 className="w-4 h-4" /> {editingAssessment ? 'Salvar revisão' : 'Publicar avaliação'}</>}
+              </button>
+            )}
+            {tab === 'avaliacao' && hb && editingAssessment && (
+              <button
+                onClick={cancelEditAssessment}
+                disabled={assessing}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', background: '#E5E7EB', color: '#374151', border: 'none', marginRight: '8px', cursor: assessing ? 'not-allowed' : 'pointer' }}>
+                Cancelar
               </button>
             )}
           </div>
