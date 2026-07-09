@@ -1,0 +1,287 @@
+// src/features/dashboard/IntegratedDashboardPage.tsx
+import { useQuery } from '@tanstack/react-query'
+import { Loader2, AlertCircle, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle } from 'lucide-react'
+import { useAuthStore, isHidrobr } from '@/store/authStore'
+import { supabase } from '@/lib/supabase'
+
+const TSM_STANDARD_ID = 2
+
+const GISTM_TOPIC_COLORS: Record<string, string> = {
+  T1: '#1B4F72', T2: '#117A65', T3: '#7D6608',
+  T4: '#6E2F1A', T5: '#922B21', T6: '#1A5276',
+}
+
+const TOPIC_ICONS: Record<string, any> = {
+  shield: Shield, 'alert-triangle': AlertTriangle, heart: Heart, trash: Trash2,
+  leaf: Leaf, cloud: Cloud, droplet: Droplet, users: Users,
+}
+
+function TopicIcon({ name, color }: { name?: string; color?: string }) {
+  const Comp = (name && TOPIC_ICONS[name]) || Circle
+  return <Comp size={15} style={{ color: color ?? '#0A9396' }} />
+}
+
+function getBarColor(pct: number) {
+  if (pct >= 75) return '#059669'
+  if (pct >= 50) return '#2a78d6'
+  if (pct >= 25) return '#D97706'
+  if (pct > 0) return '#e34948'
+  return '#D1D5DB'
+}
+
+function Gauge({ value, label, color }: { value: number; label?: string; color?: string }) {
+  const r = 38, cx = 50, cy = 52
+  const sa = -Math.PI * 0.75, sw = Math.PI * 1.5
+  const v = Math.min(Math.max(value, 0), 100)
+  const fs = sw * (v / 100)
+  const ea = sa + fs
+  const x1 = cx + r * Math.cos(sa), y1 = cy + r * Math.sin(sa)
+  const bx2 = cx + r * Math.cos(sa + sw), by2 = cy + r * Math.sin(sa + sw)
+  const ex = cx + r * Math.cos(ea), ey = cy + r * Math.sin(ea)
+  const lf = fs > Math.PI ? 1 : 0
+  const col = color ?? getBarColor(v)
+  return (
+    <svg viewBox="0 0 100 88" className="w-28 h-24 mx-auto">
+      <path d={`M${x1} ${y1} A ${r} ${r} 0 1 1 ${bx2} ${by2}`} fill="none" stroke="#F3F4F6" strokeWidth="9" strokeLinecap="round" />
+      {v > 0 && <path d={`M${x1} ${y1} A ${r} ${r} 0 ${lf} 1 ${ex} ${ey}`} fill="none" stroke={col} strokeWidth="9" strokeLinecap="round" />}
+      <text x="50" y="56" textAnchor="middle" fontSize="18" fontWeight="800" fill={col} fontFamily="Inter,sans-serif">{v}%</text>
+      {label && <text x="50" y="70" textAnchor="middle" fontSize="8" fill="#9CA3AF" fontFamily="Inter,sans-serif">{label}</text>}
+    </svg>
+  )
+}
+
+function MetricCard({ value, label, sub, color }: { value: string | number; label: string; sub?: string; color: string }) {
+  return (
+    <div className="card p-4" style={{ borderTop: `3px solid ${color}` }}>
+      <div className="text-3xl font-extrabold tracking-tight" style={{ color }}>{value}</div>
+      <div className="text-sm text-gray-500 mt-1.5">{label}</div>
+      {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
+    </div>
+  )
+}
+
+function TopicBar({ code, label, score, color, icon }: { code: string; label: string; score: number; color: string; icon?: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="w-24 flex-shrink-0 flex items-center gap-1.5">
+        {icon !== undefined && <TopicIcon name={icon} color={color} />}
+        <span className="text-[10px] font-bold" style={{ color }}>{code}</span>
+      </div>
+      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, background: color }} />
+      </div>
+      <span className="text-[10px] font-semibold w-8 text-right" style={{ color: score === 0 ? '#9CA3AF' : color }}>{score}%</span>
+    </div>
+  )
+}
+
+export function IntegratedDashboardPage() {
+  const { profile } = useAuthStore()
+  const hb = isHidrobr(profile?.role)
+  const orgId = profile?.organization_id
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard-integrado', orgId, hb],
+    enabled: !!profile,
+    queryFn: async () => {
+      let cycleQuery = supabase.from('assessment_cycles')
+        .select('*, organizations(name)')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (!hb && orgId) cycleQuery = cycleQuery.eq('organization_id', orgId)
+      const { data: cycles } = await cycleQuery
+      const cycle = cycles?.[0] ?? null
+
+      if (!cycle) return {
+        cycle: null,
+        gistm: { score: 0, kpis: { total: 0, approved: 0 }, topics: [] },
+        tsm: { score: 0, kpis: { total: 0, approved: 0 }, topics: [] },
+        combinedScore: 0,
+      }
+
+      // ── GISTM ──────────────────────────────────────────
+      const { data: gTopics } = await supabase.from('gistm_topics').select('*').order('display_order')
+      const { data: gPrinciples } = await supabase.from('gistm_principles').select('*').order('display_order')
+      const { data: gRequirements } = await supabase.from('gistm_requirements').select('*')
+      const { data: gResponses } = await supabase.from('requirement_responses').select('*').eq('cycle_id', cycle.id)
+      const gRespIds = (gResponses ?? []).map((r: any) => r.id)
+      const { data: gAssessments } = gRespIds.length > 0
+        ? await supabase.from('hidrobr_assessments').select('response_id, score_value, published_at').in('response_id', gRespIds)
+        : { data: [] as any[] }
+
+      const gAssessMap = new Map((gAssessments ?? []).map((a: any) => [a.response_id, a]))
+      const gRespByReqId = new Map((gResponses ?? []).map((r: any) => [r.requirement_id, r]))
+
+      let gWeightedSum = 0, gTotalWeight = 0
+      ;(gRequirements ?? []).forEach((req: any) => {
+        const w = Number(req.weight) || 1
+        gTotalWeight += w
+        const resp = gRespByReqId.get(req.id)
+        if (resp) {
+          const sv = gAssessMap.get(resp.id)?.score_value
+          if (sv != null) gWeightedSum += sv * w
+        }
+      })
+      const gScore = gTotalWeight > 0 ? Math.round(gWeightedSum / gTotalWeight) : 0
+      const gApproved = (gResponses ?? []).filter((r: any) => r.status === 'approved').length
+
+      const gTopicData = (gTopics ?? []).map((topic: any) => {
+        const tPrinciples = (gPrinciples ?? []).filter((p: any) => p.topic_id === topic.id)
+        const tReqs = (gRequirements ?? []).filter((r: any) => tPrinciples.some((p: any) => p.id === r.principle_id))
+        let wSum = 0, wTotal = 0
+        tReqs.forEach((req: any) => {
+          const w = Number(req.weight) || 1
+          wTotal += w
+          const resp = gRespByReqId.get(req.id)
+          if (resp) {
+            const sv = gAssessMap.get(resp.id)?.score_value
+            if (sv != null) wSum += sv * w
+          }
+        })
+        return {
+          code: topic.code, title: topic.title,
+          color: GISTM_TOPIC_COLORS[topic.code] ?? '#0A9396',
+          score: wTotal > 0 ? Math.round(wSum / wTotal) : 0,
+        }
+      })
+
+      // ── TSM ────────────────────────────────────────────
+      const { data: tTopics } = await supabase.from('standard_topics').select('*').eq('standard_id', TSM_STANDARD_ID).order('display_order')
+      const { data: tRequirements } = await supabase.from('standard_requirements').select('*').eq('standard_id', TSM_STANDARD_ID).order('display_order')
+      const tReqIds = (tRequirements ?? []).map((r: any) => r.id)
+      const { data: tResponses } = tReqIds.length > 0
+        ? await supabase.from('tsm_responses').select('*').eq('cycle_id', cycle.id).in('requirement_id', tReqIds)
+        : { data: [] as any[] }
+      const tRespIds = (tResponses ?? []).map((r: any) => r.id)
+      const { data: tAssessments } = tRespIds.length > 0
+        ? await supabase.from('tsm_assessments').select('*').in('response_id', tRespIds)
+        : { data: [] as any[] }
+
+      const tAssessMap = new Map((tAssessments ?? []).map((a: any) => [a.response_id, a]))
+      const tRespByReqId = new Map((tResponses ?? []).map((r: any) => [r.requirement_id, r]))
+
+      let tWeightedSum = 0, tTotalWeight = 0
+      ;(tRequirements ?? []).forEach((req: any) => {
+        const w = Number(req.weight) || 1
+        tTotalWeight += w
+        const resp = tRespByReqId.get(req.id)
+        if (resp) {
+          const sv = tAssessMap.get(resp.id)?.score_value
+          if (sv != null) tWeightedSum += sv * w
+        }
+      })
+      const tScore = tTotalWeight > 0 ? Math.round(tWeightedSum / tTotalWeight) : 0
+      const tApproved = (tResponses ?? []).filter((r: any) => r.status === 'approved').length
+
+      const tTopicData = (tTopics ?? []).map((topic: any) => {
+        const tReqs = (tRequirements ?? []).filter((r: any) => r.topic_id === topic.id)
+        let wSum = 0, wTotal = 0
+        tReqs.forEach((req: any) => {
+          const w = Number(req.weight) || 1
+          wTotal += w
+          const resp = tRespByReqId.get(req.id)
+          if (resp) {
+            const sv = tAssessMap.get(resp.id)?.score_value
+            if (sv != null) wSum += sv * w
+          }
+        })
+        return {
+          code: topic.code, title: topic.title, icon: topic.icon,
+          color: topic.color_hex ?? '#0A9396',
+          score: wTotal > 0 ? Math.round(wSum / wTotal) : 0,
+        }
+      })
+
+      const combinedScore = Math.round((gScore + tScore) / 2)
+
+      return {
+        cycle,
+        gistm: { score: gScore, kpis: { total: (gRequirements ?? []).length, approved: gApproved }, topics: gTopicData },
+        tsm: { score: tScore, kpis: { total: (tRequirements ?? []).length, approved: tApproved }, topics: tTopicData },
+        combinedScore,
+      }
+    },
+  })
+
+  if (isLoading) return (
+    <div className="p-6 flex items-center gap-3 text-gray-500">
+      <Loader2 className="w-5 h-5 animate-spin text-brand-400" />
+      <span className="text-sm">Carregando dashboard integrado...</span>
+    </div>
+  )
+
+  const { cycle, gistm, tsm, combinedScore } = data as any
+
+  if (!cycle) return (
+    <div className="p-6">
+      <div className="card p-10 text-center">
+        <AlertCircle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+        <p className="text-gray-600 font-medium">Nenhum ciclo ativo encontrado</p>
+        <p className="text-gray-400 text-sm mt-1">
+          {hb ? 'Crie um ciclo na página de Clientes.' : 'Contate a HIDROBR para criar um ciclo.'}
+        </p>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="p-6 space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Dashboard Integrado</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{cycle.name} · {cycle.organizations?.name}</p>
+        </div>
+        <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Ciclo ativo
+        </span>
+      </div>
+
+      {/* Gauges comparativos */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="card p-5 flex flex-col items-center justify-center">
+          <Gauge value={gistm.score} label="Aderência GISTM" color="#0A9396" />
+        </div>
+        <div className="card p-5 flex flex-col items-center justify-center">
+          <Gauge value={tsm.score} label="Aderência TSM" color="#7D6608" />
+        </div>
+        <div className="card p-5 flex flex-col items-center justify-center">
+          <Gauge value={combinedScore} label="Score combinado (média)" color="#1A5276" />
+        </div>
+      </div>
+
+      {/* KPIs lado a lado */}
+      <div className="grid grid-cols-4 gap-4">
+        <MetricCard value={gistm.kpis.total} label="Requisitos GISTM" color="#0A9396" />
+        <MetricCard value={gistm.kpis.approved} label="Aprovados GISTM" color="#059669" />
+        <MetricCard value={tsm.kpis.total} label="Requisitos TSM" color="#7D6608" />
+        <MetricCard value={tsm.kpis.approved} label="Aprovados TSM" color="#059669" />
+      </div>
+
+      <p className="text-xs text-gray-400 -mt-2">
+        O score combinado é calculado como a média simples entre a aderência GISTM e a aderência TSM.
+      </p>
+
+      {/* Comparativo por tópico */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="card p-5">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Score por tópico — GISTM</div>
+          <div className="space-y-2.5">
+            {gistm.topics.map((t: any) => (
+              <TopicBar key={t.code} code={t.code} label={t.title} score={t.score} color={t.color} />
+            ))}
+          </div>
+        </div>
+        <div className="card p-5">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Score por tópico — TSM</div>
+          <div className="space-y-2.5">
+            {tsm.topics.map((t: any) => (
+              <TopicBar key={t.code} code={t.code} label={t.title} score={t.score} color={t.color} icon={t.icon} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
