@@ -1,11 +1,13 @@
 // src/components/AppLayout.tsx
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
-import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Shield, Settings, Users, Inbox } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Shield, Settings, Users, Inbox, Gauge, Layers } from 'lucide-react'
 
 const NAV = [
   { section: 'Principal', items: [
     { to: '/dashboard',         label: 'Dashboard',         icon: LayoutDashboard },
+    { to: '/dashboard-tsm', label: 'Dashboard TSM', icon: Gauge },
+    { to: '/dashboard-integrado', label: 'Dashboard Integrado', icon: Layers },
     { to: '/requirements',      label: 'Requisitos GISTM',  icon: ClipboardList },
     { to: '/requirements-tsm',  label: 'Requisitos TSM',    icon: ClipboardList },
     { to: '/evidences',         label: 'Evidências',        icon: Paperclip },
