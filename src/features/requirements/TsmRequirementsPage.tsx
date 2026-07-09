@@ -1,11 +1,27 @@
 // src/features/requirements/TsmRequirementsPage.tsx
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, ChevronDown, Loader2, X, Save, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ChevronRight, ChevronDown, Loader2, X, Save, AlertCircle, CheckCircle2, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 
 const TSM_STANDARD_ID = 2
+
+const TOPIC_ICONS: Record<string, any> = {
+    shield: Shield,
+    'alert-triangle': AlertTriangle,
+    heart: Heart,
+    trash: Trash2,
+    leaf: Leaf,
+    cloud: Cloud,
+    droplet: Droplet,
+    users: Users,
+}
+
+function TopicIcon({ name, color }: { name?: string | null; color?: string }) {
+    const IconComp = (name && TOPIC_ICONS[name]) || Circle
+    return <IconComp className="w-5 h-5" style={color ? { color } : undefined} />
+}
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   not_started:   { label: 'Não iniciado',    color: '#9CA3AF', bg: '#F9FAFB',  dot: 'bg-gray-300' },
@@ -495,7 +511,7 @@ export function TsmRequirementsPage() {
                 <div className="flex items-center justify-between px-4 py-3"
                   style={{ background: (topic.color_hex ?? '#1B4F72') + '15', borderBottom: `2px solid ${topic.color_hex ?? '#1B4F72'}` }}>
                   <div className="flex items-center gap-3">
-                    {topic.icon && <span className="text-lg">{topic.icon}</span>}
+                    {topic.icon && <TopicIcon name={topic.icon} color={topic.color_hex} />}
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: topic.color_hex ?? '#1B4F72' }}>{topic.code}</span>
                       <p className="text-sm font-bold text-gray-900">{topic.title}</p>
