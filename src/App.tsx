@@ -6,6 +6,8 @@ import { useAuthStore } from '@/store/authStore'
 import { AppLayout } from '@/components/AppLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { TsmDashboardPage } from '@/features/dashboard/TsmDashboardPage'
+import { IntegratedDashboardPage } from '@/features/dashboard/IntegratedDashboardPage'
 import { RequirementsPage } from '@/features/requirements/RequirementsPage'
 import { EvidencesPage } from '@/features/evidences/EvidencesPage'
 import { ActionPlanPage } from '@/features/action-plan/ActionPlanPage'
@@ -58,6 +60,8 @@ export default function App() {
         <Route path="/" element={<RequireAuth><AppLayout /></RequireAuth>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="dashboard-tsm" element={<TsmDashboardPage />} />
+          <Route path="dashboard-integrado" element={<IntegratedDashboardPage />} />
           <Route path="requirements" element={<RequirementsPage />} />
           <Route path="evidences" element={<EvidencesPage />} />
           <Route path="action-plan" element={<ActionPlanPage />} />
