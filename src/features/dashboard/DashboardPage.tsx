@@ -241,7 +241,7 @@ export function DashboardPage() {
       const actionsArr = Array.isArray(actionsRaw) ? actionsRaw : []
       const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
 
-      // Resultado do requisito no cliente = média simples entre as barragens em escopo
+      // Resultado do requisito no cliente = pior caso (mínimo) entre as barragens em escopo
       const { clientScoreByRequirement } = buildRequirementScoreMaps(facilityIds, responses ?? [], assessMap)
 
       // Score global — todos os 77 requisitos no denominador

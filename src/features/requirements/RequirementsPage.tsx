@@ -678,7 +678,7 @@ export function RequirementsPage() {
       {(facilities?.length ?? 0) > 1 && (
         <div className="mb-5">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-            Avaliação por barragem — a conformidade do cliente é a resultante (média) entre todas as barragens
+            Avaliação por barragem — a conformidade do cliente é o pior caso (elo mais fraco) entre todas as barragens
           </div>
           <div className="flex flex-wrap gap-2">
             {facilities!.map((f: any) => (

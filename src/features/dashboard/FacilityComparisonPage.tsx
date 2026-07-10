@@ -70,7 +70,7 @@ export function FacilityComparisonPage() {
         .eq('cycle_id', cycle.id).in('facility_id', facilityIds)
       const gRespIds = (gResponses ?? []).map((r: any) => r.id)
       const { data: gAssessments } = gRespIds.length > 0
-        ? await supabase.from('hidrobr_assessments').select('response_id, score_value').in('response_id', gRespIds)
+        ? await supabase.from('hidrobr_assessments').select('response_id, score, score_value').in('response_id', gRespIds)
         : { data: [] as any[] }
       const gAssessMap = new Map((gAssessments ?? []).map((a: any) => [a.response_id, a]))
       const { scorePerFacility: gScorePerFacility } = buildRequirementScoreMaps(facilityIds, gResponses ?? [], gAssessMap)
@@ -183,7 +183,7 @@ export function FacilityComparisonPage() {
       <div className="card p-5">
         <div className="mb-3">
           <h2 className="text-sm font-bold text-gray-900">Aderência geral por barragem</h2>
-          <p className="text-xs text-gray-400 mt-0.5">GISTM, TSM e score combinado (média) de cada barragem — o resultado do cliente é a média simples entre elas</p>
+          <p className="text-xs text-gray-400 mt-0.5">GISTM, TSM e score combinado (média) de cada barragem — o resultado do cliente é o pior caso (elo mais fraco) entre elas</p>
         </div>
         <ResponsiveContainer width="100%" height={320}>
           <BarChart data={chartData} margin={{ top: 10, right: 16, bottom: 0, left: -10 }}>

@@ -1,50 +1,50 @@
 -- ============================================================
--- MIGRAÇÃO: avaliação de requisitos GISTM/TSM por BARRAGEM
+-- MIGRACAO: avaliacao de requisitos GISTM/TSM por BARRAGEM
 -- Execute este SQL no SQL Editor do Supabase do projeto hidrobr-gistm
 --
 -- Contexto (definido com o cliente em 2026-07-09):
---   Hoje cada requisito (GISTM e TSM) é avaliado uma única vez por CICLO,
---   mesmo quando o ciclo cobre várias barragens (assessment_cycles.facility_ids).
---   A partir desta migração, cada barragem em escopo do ciclo passa a ter sua
---   própria resposta/avaliação por requisito. O resultado do requisito no
---   nível do CLIENTE passa a ser a MÉDIA SIMPLES entre as barragens (calculada
---   no frontend, ver src/lib/facilityScoring.ts — não há coluna persistida
+--   Hoje cada requisito (GISTM e TSM) e avaliado uma unica vez por CICLO,
+--   mesmo quando o ciclo cobre varias barragens (assessment_cycles.facility_ids).
+--   A partir desta migracao, cada barragem em escopo do ciclo passa a ter sua
+--   propria resposta/avaliacao por requisito. O resultado do requisito no
+--   nivel do CLIENTE passa a ser a MEDIA SIMPLES entre as barragens (calculada
+--   no frontend, ver src/lib/facilityScoring.ts - nao ha coluna persistida
 --   com esse valor).
 --
--- Decisão de migração de dados (aprovada com o cliente): ZERAR e reavaliar do
--- zero por barragem, em vez de duplicar as respostas antigas (que não tinham
+-- Decisao de migracao de dados (aprovada com o cliente): ZERAR e reavaliar do
+-- zero por barragem, em vez de duplicar as respostas antigas (que nao tinham
 -- granularidade de barragem). Por isso este script ARQUIVA as respostas e
--- avaliações atuais em tabelas *_legacy_pre_facility (não deleta o histórico
--- definitivamente) e recria requirement_responses/tsm_responses vazias, já
--- com a coluna facility_id obrigatória.
+-- avaliacoes atuais em tabelas *_legacy_pre_facility (nao deleta o historico
+-- definitivamente) e recria requirement_responses/tsm_responses vazias, ja
+-- com a coluna facility_id obrigatoria.
 --
--- IMPORTANTE — leia antes de rodar:
---   1. Este script foi escrito com base na leitura do código-fonte do app
---      (não foi possível confirmar diretamente o schema em produção neste
---      momento). Antes de rodar em produção, rode primeiro em um projeto
---      Supabase de staging/cópia e confira se os nomes de constraint
---      (ON CONFLICT / UNIQUE) batem com os reais — use \d requirement_responses
---      e \d tsm_responses no SQL Editor para conferir antes.
---   2. Evidências (arquivos no Storage) ligadas às respostas arquivadas NÃO
---      são apagadas do bucket "evidences" — apenas a referência na tabela
---      evidences é arquivada junto com a resposta. Se precisar recuperar
+-- IMPORTANTE - leia antes de rodar:
+--   1. Este script foi escrito com base na leitura do codigo-fonte do app
+--      (nao foi possivel confirmar diretamente o schema em producao neste
+--      momento). Antes de rodar em producao, rode primeiro em um projeto
+--      Supabase de staging/copia e confira se os nomes de constraint
+--      (ON CONFLICT / UNIQUE) batem com os reais - use "\d requirement_responses"
+--      e "\d tsm_responses" no SQL Editor para conferir antes.
+--   2. Evidencias (arquivos no Storage) ligadas as respostas arquivadas NAO
+--      sao apagadas do bucket "evidences" - apenas a referencia na tabela
+--      evidences e arquivada junto com a resposta. Se precisar recuperar
 --      arquivos antigos, consulte evidences_legacy_pre_facility.
---   3. Rode dentro de uma transação (BEGIN/COMMIT já incluído). Se algo
+--   3. Roda dentro de uma transacao (BEGIN/COMMIT ja incluido). Se algo
 --      falhar, o Postgres desfaz tudo automaticamente.
 -- ============================================================
 
 begin;
 
--- ── 1. Arquiva GISTM: requirement_responses + dependentes ────────────────
+-- 1. Arquiva GISTM: requirement_responses + dependentes
 alter table if exists requirement_responses rename to requirement_responses_legacy_pre_facility;
 alter table if exists hidrobr_assessments rename to hidrobr_assessments_legacy_pre_facility;
 alter table if exists evidences rename to evidences_legacy_pre_facility;
 alter table if exists comments rename to comments_legacy_pre_facility;
 
--- Renomear uma tabela NÃO renomeia seus índices/constraints (eles ficam com o
+-- Renomear uma tabela NAO renomeia seus indices/constraints (eles ficam com o
 -- nome antigo, ex: requirement_responses_pkey, idx_responses_cycle). Isso faz
--- as próximas CREATE TABLE/CREATE INDEX colidirem por nome duplicado. Este
--- bloco renomeia tudo que pertence às tabelas arquivadas, liberando os nomes
+-- as proximas CREATE TABLE/CREATE INDEX colidirem por nome duplicado. Este
+-- bloco renomeia tudo que pertence as tabelas arquivadas, liberando os nomes
 -- originais para as tabelas novas.
 do $$
 declare
@@ -69,7 +69,7 @@ begin
   end loop;
 end $$;
 
--- ── 2. Recria requirement_responses já com facility_id obrigatório ───────
+-- 2. Recria requirement_responses ja com facility_id obrigatorio
 create table requirement_responses (
   id uuid primary key default uuid_generate_v4(),
   cycle_id uuid not null references assessment_cycles(id) on delete cascade,
@@ -127,7 +127,7 @@ create table comments (
   created_at timestamptz default now()
 );
 
--- ── 3. RLS + policies (mesma regra de acesso de antes, por organização) ──
+-- 3. RLS + policies (mesma regra de acesso de antes, por organizacao)
 alter table requirement_responses enable row level security;
 alter table hidrobr_assessments enable row level security;
 alter table evidences enable row level security;
@@ -168,14 +168,14 @@ create policy "comments_access" on comments for all using (
   )
 );
 
--- ── 4. Arquiva TSM: tsm_responses + tsm_assessments ──────────────────────
+-- 4. Arquiva TSM: tsm_responses + tsm_assessments
 -- Ajuste o nome/coluna abaixo caso o schema real de tsm_responses tenha
--- colunas adicionais não previstas aqui (confira com \d tsm_responses antes
--- de rodar em produção).
+-- colunas adicionais nao previstas aqui (confira com "\d tsm_responses" antes
+-- de rodar em producao).
 alter table if exists tsm_responses rename to tsm_responses_legacy_pre_facility;
 alter table if exists tsm_assessments rename to tsm_assessments_legacy_pre_facility;
 
--- mesma correção de nomes de índices/constraints explicada no passo 1
+-- mesma correcao de nomes de indices/constraints explicada no passo 1
 do $$
 declare
   tbl text;
@@ -242,10 +242,10 @@ create policy "tsm_assessments_hidrobr_write" on tsm_assessments for insert with
 commit;
 
 -- ============================================================
--- Após rodar com sucesso e validar o app, as tabelas *_legacy_pre_facility
--- podem ser mantidas indefinidamente como histórico (não atrapalham o app,
--- que não faz mais referência a elas) ou removidas manualmente quando não
--- forem mais necessárias, com:
+-- Apos rodar com sucesso e validar o app, as tabelas *_legacy_pre_facility
+-- podem ser mantidas indefinidamente como historico (nao atrapalham o app,
+-- que nao faz mais referencia a elas) ou removidas manualmente quando nao
+-- forem mais necessarias, com:
 --   drop table requirement_responses_legacy_pre_facility cascade;
 --   drop table hidrobr_assessments_legacy_pre_facility cascade;
 --   drop table evidences_legacy_pre_facility cascade;

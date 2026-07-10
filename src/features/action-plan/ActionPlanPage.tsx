@@ -507,14 +507,14 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
         : { data: [] }
       const { data: assessments } = (responses ?? []).length > 0
         ? await supabase.from('hidrobr_assessments')
-            .select('response_id, score_value').in('response_id', (responses ?? []).map((r: any) => r.id))
+            .select('response_id, score, score_value').in('response_id', (responses ?? []).map((r: any) => r.id))
         : { data: [] }
 
       // Busca peso total de todos os 77 requisitos (denominador do score)
       const { data: allReqs } = await supabase.from('gistm_requirements').select('weight')
       const totalWeight = (allReqs ?? []).reduce((s: number, r: any) => s + (Number(r.weight) || 1), 0)
 
-      // Score do requisito = média simples entre as barragens em escopo (mesma regra do dashboard)
+      // Score do requisito = pior caso (mínimo) entre as barragens em escopo (mesma regra do dashboard)
       const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
       const { clientScoreByRequirement } = buildRequirementScoreMaps(facilityIds, responses ?? [], assessMap)
       const principleMap = new Map((principles ?? []).map((p: any) => [p.id, p]))

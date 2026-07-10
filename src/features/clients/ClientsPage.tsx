@@ -560,7 +560,7 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
                 <div className="text-sm font-semibold text-gray-900">{c.name}</div>
                 <div className="text-xs text-gray-400 mt-0.5">
                   {facilityNames.length > 0 ? facilityNames.join(', ') : (c.tailings_facilities?.name ?? 'Nenhuma barragem')} · Ano {c.reference_year}
-                  {facilityNames.length > 1 && <span className="text-brand-500"> · resultado = média entre {facilityNames.length} barragens</span>}
+                  {facilityNames.length > 1 && <span className="text-brand-500"> · resultado = pior caso entre {facilityNames.length} barragens</span>}
                   {c.target_date ? ` · Prazo: ${new Date(c.target_date).toLocaleDateString('pt-BR')}` : ''}
                 </div>
               </div>

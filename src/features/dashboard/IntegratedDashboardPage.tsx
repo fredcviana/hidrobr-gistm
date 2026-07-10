@@ -113,7 +113,7 @@ export function IntegratedDashboardPage() {
         : { data: [] as any[] }
       const gRespIds = (gResponses ?? []).map((r: any) => r.id)
       const { data: gAssessments } = gRespIds.length > 0
-        ? await supabase.from('hidrobr_assessments').select('response_id, score_value, published_at').in('response_id', gRespIds)
+        ? await supabase.from('hidrobr_assessments').select('response_id, score, score_value, published_at').in('response_id', gRespIds)
         : { data: [] as any[] }
 
       const gAssessMap = new Map((gAssessments ?? []).map((a: any) => [a.response_id, a]))
