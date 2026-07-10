@@ -24,15 +24,35 @@ const SCORE_OPTIONS = [
   { key: 'partially_conforming', label: 'Parcialmente Conforme', value: 50,  color: '#D97706', bg: '#FFFBEB' },
   { key: 'non_conforming',       label: 'Não Conforme',          value: 0,   color: '#DC2626', bg: '#FEF2F2' },
 ]
-const GISTM_PRINCIPLES = Array.from({ length: 15 }, (_, i) => ({ code: `P${String(i+1).padStart(2,'0')}`, standard: 'GISTM' }))
-const TSM_PRINCIPLES = Array.from({ length: 18 }, (_, i) => ({ code: `TSM-P${String(i+1).padStart(2,'0')}`, standard: 'TSM' }))
-const ALL_PRINCIPLES = [...GISTM_PRINCIPLES, ...TSM_PRINCIPLES]
+const GISTM_PRINCIPLES = Array.from({ length: 15 }, (_, i) => ({ code: `P${String(i+1).padStart(2,'0')}`, label: '', standard: 'GISTM' }))
+
+// Tópicos TSM reais (catálogo reconstruído nesta sessão: 9 protocolos / 34 indicadores,
+// tabela standard_topics com standard_id=2). Antes disso o seletor usava um esquema
+// fictício de 18 "princípios" TSM-P01..P18 que não correspondia a nada no banco —
+// substituído aqui por uma busca ao vivo dos tópicos reais (REJ, CLIMA, AGUA, BIODIV,
+// CRISE, DIVERSO, SEGURO, TRABINF, COMUNIDADE), mantendo o prefixo "TSM-" no código
+// (ex.: "TSM-REJ") para não quebrar a checagem `startsWith('TSM')` usada em outros
+// pontos (ex.: cálculo de ganho GISTM-only para ações antigas sem vínculo fino).
+function useTsmTopicOptions() {
+  return useQuery({
+    queryKey: ['tsm-topics-real'],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase.from('standard_topics')
+        .select('code, title').eq('standard_id', 2).order('display_order')
+      return (data ?? []).map((t: any) => ({ code: `TSM-${t.code}`, label: t.title as string, standard: 'TSM' }))
+    },
+  })
+}
 
 // ── Seletor de princípios ─────────────────────────────────────
 function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const filtered = ALL_PRINCIPLES.filter(p => p.code.toLowerCase().includes(search.toLowerCase()))
+  const { data: tsmTopics } = useTsmTopicOptions()
+  const allPrinciples = [...GISTM_PRINCIPLES, ...(tsmTopics ?? [])]
+  const filtered = allPrinciples.filter(p =>
+    p.code.toLowerCase().includes(search.toLowerCase()) || (p.label ?? '').toLowerCase().includes(search.toLowerCase()))
   function toggle(code: string) { onChange(value.includes(code) ? value.filter(c => c !== code) : [...value, code]) }
   return (
     <div className="relative">
@@ -60,7 +80,7 @@ function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v:
                     <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${value.includes(p.code) ? 'bg-brand-600' : 'border-2 border-gray-300'}`}>
                       {value.includes(p.code) && <span className="text-white text-[10px] font-bold">✓</span>}
                     </div>
-                    <span className="text-sm text-gray-700">{p.code}</span>
+                    <span className="text-sm text-gray-700">{p.code}{p.label ? ` — ${p.label}` : ''}</span>
                   </div>
                 ))}
               </div>
@@ -1007,6 +1027,7 @@ export function ActionPlanPage() {
   const [modal, setModal] = useState<any>(null)
   const [completing, setCompleting] = useState<any>(null) // ação sendo concluída
   const orgId = profile?.organization_id ?? ''
+  const { data: tsmTopics } = useTsmTopicOptions()
 
   // Busca ciclo ativo para o modal de reavaliação
   const { data: activeCycle } = useQuery({
@@ -1122,7 +1143,7 @@ export function ActionPlanPage() {
         <select className="form-input w-44 text-xs" value={filterPrinciple} onChange={e => setFilterPrinciple(e.target.value)}>
           <option value="">Todos os princípios</option>
           <optgroup label="GISTM">{GISTM_PRINCIPLES.map(p => <option key={p.code} value={p.code}>{p.code}</option>)}</optgroup>
-          <optgroup label="TSM">{TSM_PRINCIPLES.map(p => <option key={p.code} value={p.code}>{p.code}</option>)}</optgroup>
+          <optgroup label="TSM">{(tsmTopics ?? []).map(p => <option key={p.code} value={p.code}>{p.code} — {p.label}</option>)}</optgroup>
         </select>
       </div>
 
