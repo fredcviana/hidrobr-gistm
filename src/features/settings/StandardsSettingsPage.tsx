@@ -22,10 +22,17 @@ function RequirementEditor({ req, topicColor, onSaved }: { req: any; topicColor:
 
   const mut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from(table)
+      const { data, error } = await supabase.from(table)
         .update({ title, description, guidance, weight, sub_requirements: subs, updated_at: new Date().toISOString() })
         .eq('id', req.id)
+        .select('id')
       if (error) throw error
+      // O Supabase não retorna erro quando a política de RLS bloqueia o UPDATE —
+      // ele simplesmente afeta 0 linhas. Sem essa checagem, a tela mostra "Salvo!"
+      // mesmo quando nada foi persistido. Detectamos isso aqui e avisamos o usuário.
+      if (!data || data.length === 0) {
+        throw new Error('A alteração não foi salva: seu usuário não tem permissão de escrita nesta tabela (política de RLS). Peça para um admin liberar UPDATE em ' + table + '.')
+      }
     },
     onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 2500); onSaved() },
   })
@@ -108,6 +115,11 @@ function RequirementEditor({ req, topicColor, onSaved }: { req: any; topicColor:
               )}
             </div>
           </div>
+          {mut.isError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-xs text-red-700">
+              {(mut.error as any)?.message ?? 'Erro ao salvar'}
+            </div>
+          )}
           <div className="flex justify-end pt-2 border-t border-gray-100">
             <button
               style={{display:'inline-flex',alignItems:'center',gap:'6px',padding:'6px 14px',borderRadius:'8px',fontSize:'12px',fontWeight:'600',background: dirty && !mut.isPending ? '#002B3D' : '#9CA3AF',color:'white',border:'none',cursor: dirty ? 'pointer' : 'not-allowed'}}
@@ -218,7 +230,7 @@ function GistmTab() {
               {group.reqs.map((req: any) => (
                 <RequirementEditor
                   key={req.id}
-                  req={{ ...req, title: req.code, gistm_topics: p?.topic }}
+                  req={{ ...req, gistm_topics: p?.topic }}
                   topicColor={topicColor}
                   onSaved={() => qc.invalidateQueries({ queryKey: ['gistm-req-edit'] })}
                 />
