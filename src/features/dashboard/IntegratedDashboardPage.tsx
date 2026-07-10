@@ -1,7 +1,7 @@
 // src/features/dashboard/IntegratedDashboardPage.tsx
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Loader2, AlertCircle, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle, Layers } from 'lucide-react'
+import { Loader2, AlertCircle, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle, Layers, ClipboardList, Building2 } from 'lucide-react'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 import { supabase } from '@/lib/supabase'
 import { cycleFacilityIds, buildRequirementScoreMaps } from '@/lib/facilityScoring'
@@ -185,11 +185,43 @@ export function IntegratedDashboardPage() {
 
       const combinedScore = Math.round((gScore + tScore) / 2)
 
+      // ── Ações do Plano de Ação por estrutura ────────────
+      // Cruza cada ação (facility_ids) com as barragens em escopo do ciclo, para
+      // mostrar a execução operacional do plano ao lado do score de aderência.
+      // Uma ação que cobre mais de uma barragem é contada em cada uma delas
+      // (ela de fato afeta as duas); por isso o "ganho pendente" por estrutura
+      // pode somar mais que o ganho pendente total quando há ações compartilhadas.
+      const { data: facilitiesData } = facilityIds.length > 0
+        ? await supabase.from('tailings_facilities').select('id, name').in('id', facilityIds)
+        : { data: [] as any[] }
+      const { data: actions } = await supabase.from('action_items')
+        .select('id, facility_ids, status, due_date, estimated_gain')
+        .eq('organization_id', cycle.organization_id)
+
+      const today = new Date()
+      const isPending = (a: any) => !['completed', 'cancelled'].includes(a.status)
+      const isOverdue = (a: any) => isPending(a) && a.due_date && new Date(a.due_date) < today
+
+      const actionsByFacility = (facilitiesData ?? []).map((f: any) => {
+        const facActions = (actions ?? []).filter((a: any) => (a.facility_ids ?? []).includes(f.id))
+        return {
+          facilityId: f.id,
+          facilityName: f.name,
+          open: facActions.filter((a: any) => a.status === 'open').length,
+          inProgress: facActions.filter((a: any) => a.status === 'in_progress').length,
+          overdue: facActions.filter(isOverdue).length,
+          pendingGain: facActions.filter(isPending).reduce((s: number, a: any) => s + (Number(a.estimated_gain) || 0), 0),
+          total: facActions.length,
+        }
+      })
+      const actionsNoFacility = (actions ?? []).filter((a: any) => (a.facility_ids ?? []).length === 0).length
+
       return {
         cycle,
         gistm: { score: gScore, kpis: { total: (gRequirements ?? []).length * (facilityIds.length || 1), approved: gApproved }, topics: gTopicData },
         tsm: { score: tScore, kpis: { total: (tRequirements ?? []).length * (facilityIds.length || 1), approved: tApproved }, topics: tTopicData },
         combinedScore, facilityCount: facilityIds.length,
+        actionsByFacility, actionsNoFacility,
       }
     },
   })
@@ -201,7 +233,7 @@ export function IntegratedDashboardPage() {
     </div>
   )
 
-  const { cycle, gistm, tsm, combinedScore, facilityCount } = data as any
+  const { cycle, gistm, tsm, combinedScore, facilityCount, actionsByFacility, actionsNoFacility } = data as any
 
   if (!cycle) return (
     <div className="p-6">
@@ -281,6 +313,64 @@ export function IntegratedDashboardPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Ações do Plano de Ação por estrutura */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 text-brand-600" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Ações do plano por estrutura</span>
+          </div>
+          <Link to="/action-plan" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
+            Ver plano de ação completo →
+          </Link>
+        </div>
+
+        {(actionsByFacility ?? []).length === 0 ? (
+          <p className="text-sm text-gray-400 py-4 text-center">Nenhuma barragem em escopo neste ciclo.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                  <th className="text-left py-2 font-bold">Estrutura</th>
+                  <th className="text-center py-2 font-bold w-24">Abertas</th>
+                  <th className="text-center py-2 font-bold w-28">Em andamento</th>
+                  <th className="text-center py-2 font-bold w-24">Atrasadas</th>
+                  <th className="text-right py-2 font-bold w-36">Ganho pendente</th>
+                </tr>
+              </thead>
+              <tbody>
+                {actionsByFacility.map((f: any) => (
+                  <tr key={f.facilityId} className="border-b border-gray-50 last:border-0">
+                    <td className="py-2.5 font-semibold text-gray-700 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-gray-300" /> {f.facilityName}
+                    </td>
+                    <td className="text-center py-2.5">
+                      <span className={`badge text-[10px] ${f.open > 0 ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-400'}`}>{f.open}</span>
+                    </td>
+                    <td className="text-center py-2.5">
+                      <span className={`badge text-[10px] ${f.inProgress > 0 ? 'bg-purple-50 text-purple-700' : 'bg-gray-50 text-gray-400'}`}>{f.inProgress}</span>
+                    </td>
+                    <td className="text-center py-2.5">
+                      <span className={`badge text-[10px] ${f.overdue > 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-400'}`}>{f.overdue}</span>
+                    </td>
+                    <td className="text-right py-2.5 font-semibold">
+                      {f.pendingGain > 0 ? <span className="text-emerald-600">+{f.pendingGain.toFixed(1)}%</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="text-[11px] text-gray-400 mt-3">
+          Ações que cobrem mais de uma estrutura são contadas em cada uma delas — o ganho pendente por estrutura pode
+          somar mais que o total geral quando há ações compartilhadas.
+          {(actionsNoFacility ?? 0) > 0 && ` ${actionsNoFacility} ação(ões) sem estrutura vinculada não aparecem nesta tabela.`}
+        </p>
       </div>
     </div>
   )
