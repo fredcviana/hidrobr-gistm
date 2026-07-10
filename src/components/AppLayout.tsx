@@ -39,17 +39,12 @@ export function AppLayout() {
       <aside className="w-60 bg-brand-900 flex flex-col flex-shrink-0">
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/8 h-[60px]">
           {/* Marca HIDROBR real (public/logo.png) — antes usava um ícone genérico
-              (Shield) como placeholder. O arquivo é o lockup completo (símbolo +
-              "HIDROBR" + "Soluções Integradas"), então recortamos só o símbolo do
-              topo (região x:316-743, y:94-660 da imagem original 1023x1013) via
-              posicionamento absoluto, para caber no badge compacto da sidebar. */}
-          <div className="w-8 h-[42px] rounded-lg bg-brand-400 flex-shrink-0 relative overflow-hidden">
-            <img
-              src="/logo.png"
-              alt="HIDROBR"
-              className="absolute"
-              style={{ width: '77px', height: 'auto', top: '-7px', left: '-24px', maxWidth: 'none' }}
-            />
+              (Shield) como placeholder. O logo inteiro (símbolo + texto) é exibido
+              em miniatura com object-contain, sem recorte/zoom, para ficar pequeno
+              e limpo dentro do badge — a primeira versão recortava e ampliava só o
+              símbolo, o que deixava a imagem pixelizada/deformada. */}
+          <div className="w-8 h-8 rounded-lg bg-brand-400 flex items-center justify-center flex-shrink-0">
+            <img src="/logo.png" alt="HIDROBR" className="w-5 h-5 object-contain" />
           </div>
           <div>
             <div className="text-[13px] font-bold text-white leading-none">HIDROBR</div>
