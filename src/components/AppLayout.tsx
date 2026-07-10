@@ -1,7 +1,7 @@
 // src/components/AppLayout.tsx
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
-import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Shield, Settings, Users, Inbox, Gauge, Layers } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Settings, Users, Inbox, Gauge, Layers } from 'lucide-react'
 
 const NAV = [
   { section: 'Principal', items: [
@@ -38,8 +38,18 @@ export function AppLayout() {
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <aside className="w-60 bg-brand-900 flex flex-col flex-shrink-0">
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/8 h-[60px]">
-          <div className="w-8 h-8 rounded-lg bg-brand-400 flex items-center justify-center flex-shrink-0">
-            <Shield className="w-4 h-4 text-white" />
+          {/* Marca HIDROBR real (public/logo.png) — antes usava um ícone genérico
+              (Shield) como placeholder. O arquivo é o lockup completo (símbolo +
+              "HIDROBR" + "Soluções Integradas"), então recortamos só o símbolo do
+              topo (região x:316-743, y:94-660 da imagem original 1023x1013) via
+              posicionamento absoluto, para caber no badge compacto da sidebar. */}
+          <div className="w-8 h-[42px] rounded-lg bg-brand-400 flex-shrink-0 relative overflow-hidden">
+            <img
+              src="/logo.png"
+              alt="HIDROBR"
+              className="absolute"
+              style={{ width: '77px', height: 'auto', top: '-7px', left: '-24px', maxWidth: 'none' }}
+            />
           </div>
           <div>
             <div className="text-[13px] font-bold text-white leading-none">HIDROBR</div>
