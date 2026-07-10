@@ -91,50 +91,92 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
   // Estado individual por requisito
   const [overrides, setOverrides] = useState<Record<string, { score: string; text: string; responseText: string }>>({})
 
-  // Busca requisitos vinculados aos princípios da ação
+  // Busca requisitos vinculados à ação: primeiro tenta os vínculos precisos
+  // (action_requirement_links, por requisito/indicador — usado nas ações importadas
+  // do Plano de Ação), com fallback para o vínculo amplo por princípio (ações criadas
+  // manualmente antes de existir o vínculo fino).
   const { data: requirements, isLoading } = useQuery({
-    queryKey: ['action-requirements', action.principle_codes, cycleId, facilityIds.join(',')],
-    enabled: !!(action.principle_codes?.length) && !!cycleId && facilityIds.length > 0,
+    queryKey: ['action-requirements', action.id, action.principle_codes, cycleId, facilityIds.join(',')],
+    enabled: !!cycleId && facilityIds.length > 0,
     queryFn: async () => {
-      // Busca os princípios pelo código
-      const { data: principles } = await supabase.from('gistm_principles')
-        .select('id, code, number, title')
-        .in('code', action.principle_codes ?? [])
+      const { data: links } = await supabase.from('action_requirement_links')
+        .select('id, standard, gistm_requirement_id, tsm_requirement_id, share')
+        .eq('action_id', action.id)
 
-      if (!principles?.length) return []
+      let reqs: any[] = []
 
-      // Busca requisitos desses princípios
-      const principleIds = principles.map((p: any) => p.id)
-      const { data: reqs } = await supabase.from('gistm_requirements')
-        .select('id, code, description, guidance, principle_id, weight')
-        .in('principle_id', principleIds)
-        .order('display_order')
+      if (links?.length) {
+        // Vínculo fino: um requisito GISTM ou indicador TSM específico por link
+        const gistmIds = links.filter((l: any) => l.standard === 'gistm').map((l: any) => l.gistm_requirement_id)
+        const tsmIds = links.filter((l: any) => l.standard === 'tsm').map((l: any) => l.tsm_requirement_id)
+
+        const [{ data: gistmReqs }, { data: tsmReqs }] = await Promise.all([
+          gistmIds.length
+            ? supabase.from('gistm_requirements').select('id, code, description, guidance, principle_id, weight').in('id', gistmIds)
+            : Promise.resolve({ data: [] as any[] }),
+          tsmIds.length
+            ? supabase.from('standard_requirements').select('id, code, title, description, weight').in('id', tsmIds)
+            : Promise.resolve({ data: [] as any[] }),
+        ])
+
+        reqs = [
+          ...(gistmReqs ?? []).map((r: any) => ({ ...r, standard: 'gistm' })),
+          ...(tsmReqs ?? []).map((r: any) => ({ ...r, standard: 'tsm', description: r.description ?? r.title })),
+        ]
+      } else if (action.principle_codes?.length) {
+        // Fallback (ações antigas sem vínculo fino): todos os requisitos dos princípios GISTM selecionados
+        const { data: principles } = await supabase.from('gistm_principles')
+          .select('id, code, number, title')
+          .in('code', (action.principle_codes ?? []).filter((c: string) => !c.startsWith('TSM')))
+
+        if (principles?.length) {
+          const principleIds = principles.map((p: any) => p.id)
+          const { data: gistmReqs } = await supabase.from('gistm_requirements')
+            .select('id, code, description, guidance, principle_id, weight')
+            .in('principle_id', principleIds)
+            .order('display_order')
+          reqs = (gistmReqs ?? []).map((r: any) => ({ ...r, standard: 'gistm' }))
+        }
+      }
+
+      if (!reqs.length) return []
 
       // Busca respostas existentes no ciclo, em TODAS as barragens em escopo da ação
-      const reqIds = (reqs ?? []).map((r: any) => r.id)
-      const { data: responses } = reqIds.length > 0
-        ? await supabase.from('requirement_responses')
-            .select('id, requirement_id, facility_id, status, implementation_text, hidrobr_assessments(id, score, score_value, assessment_text)')
-            .eq('cycle_id', cycleId)
-            .in('facility_id', facilityIds)
-            .in('requirement_id', reqIds)
-        : { data: [] }
+      const gistmReqIds = reqs.filter(r => r.standard === 'gistm').map(r => r.id)
+      const tsmReqIds = reqs.filter(r => r.standard === 'tsm').map(r => r.id)
 
-      // responsesByFacility[requirement_id] = Map<facility_id, response>
+      const [{ data: gistmResponses }, { data: tsmResponses }] = await Promise.all([
+        gistmReqIds.length
+          ? supabase.from('requirement_responses')
+              .select('id, requirement_id, facility_id, status, implementation_text, hidrobr_assessments(id, score, score_value, assessment_text)')
+              .eq('cycle_id', cycleId).in('facility_id', facilityIds).in('requirement_id', gistmReqIds)
+          : Promise.resolve({ data: [] as any[] }),
+        tsmReqIds.length
+          ? supabase.from('tsm_responses')
+              .select('id, requirement_id, facility_id, status, implementation_text, tsm_assessments(id, score, score_value, assessment_text)')
+              .eq('cycle_id', cycleId).in('facility_id', facilityIds).in('requirement_id', tsmReqIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ])
+
+      const responses = [
+        ...(gistmResponses ?? []).map((r: any) => ({ ...r, standard: 'gistm', hidrobr_assessments: r.hidrobr_assessments })),
+        ...(tsmResponses ?? []).map((r: any) => ({ ...r, standard: 'tsm', hidrobr_assessments: r.tsm_assessments })),
+      ]
+
+      // responsesByFacility[standard::requirement_id] = Map<facility_id, response>
       const responsesByFacility = new Map<string, Map<string, any>>()
-      ;(responses ?? []).forEach((r: any) => {
-        if (!responsesByFacility.has(r.requirement_id)) responsesByFacility.set(r.requirement_id, new Map())
-        responsesByFacility.get(r.requirement_id)!.set(r.facility_id, r)
+      responses.forEach((r: any) => {
+        const key = `${r.standard}:${r.requirement_id}`
+        if (!responsesByFacility.has(key)) responsesByFacility.set(key, new Map())
+        responsesByFacility.get(key)!.set(r.facility_id, r)
       })
-      const principleMap = new Map((principles ?? []).map((p: any) => [p.id, p]))
 
-      return (reqs ?? []).map((req: any) => {
-        const byFacility = responsesByFacility.get(req.id) ?? new Map()
+      return reqs.map((req: any) => {
+        const byFacility = responsesByFacility.get(`${req.standard}:${req.id}`) ?? new Map()
         // resposta "representativa" (primeira barragem com dado) só para mostrar um preview no formulário
         const response = facilityIds.map((fid: string) => byFacility.get(fid)).find(Boolean) ?? null
         return {
           ...req,
-          principle: principleMap.get(req.principle_id),
           response,
           responsesByFacility: byFacility,
         }
@@ -190,6 +232,11 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
         const newStatus = ['fully_conforming', 'conforming'].includes(finalScore) ? 'approved' : 'needs_revision'
         const scoreValue = SCORE_OPTIONS.find(s => s.key === finalScore)?.value ?? 0
 
+        // GISTM usa requirement_responses/hidrobr_assessments; TSM usa as tabelas espelhadas
+        // tsm_responses/tsm_assessments (mesmo ciclo, mesmas barragens em escopo).
+        const responsesTable = req.standard === 'tsm' ? 'tsm_responses' : 'requirement_responses'
+        const assessmentsTable = req.standard === 'tsm' ? 'tsm_assessments' : 'hidrobr_assessments'
+
         // Aplica a mesma classificação/parecer em cada barragem em escopo da ação
         for (const facilityId of facilityIds) {
           const existing = req.responsesByFacility?.get(facilityId)
@@ -197,7 +244,7 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
 
           if (!responseId) {
             const { data: newResp, error: respErr } = await supabase
-              .from('requirement_responses').insert({
+              .from(responsesTable).insert({
                 cycle_id: cycleId,
                 facility_id: facilityId,
                 requirement_id: req.id,
@@ -208,7 +255,7 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
             if (respErr) throw new Error(`Erro ao criar resposta ${req.code}: ${respErr.message}`)
             responseId = newResp.id
           } else {
-            await supabase.from('requirement_responses').update({
+            await supabase.from(responsesTable).update({
               status: newStatus,
               implementation_text: state.responseText || existing?.implementation_text || 'Atendimento vinculado ao plano de ação.',
               updated_at: new Date().toISOString(),
@@ -216,7 +263,7 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
           }
 
           // Upsert da avaliação
-          await supabase.from('hidrobr_assessments').upsert({
+          await supabase.from(assessmentsTable).upsert({
             response_id: responseId,
             assessed_by: profile!.id,
             score: finalScore,
@@ -245,7 +292,7 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
   }
 
   const reqs = requirements ?? []
-  const noPrinciples = !action.principle_codes?.length
+  const noRequirements = !isLoading && reqs.length === 0
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
@@ -258,7 +305,7 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
             <CheckCircle2 className="w-5 h-5 text-emerald-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-bold text-gray-900">Concluir ação e registrar avaliação GISTM</h2>
+            <h2 className="text-base font-bold text-gray-900">Concluir ação e registrar avaliação GISTM/TSM</h2>
             <p className="text-sm text-gray-500 mt-0.5 truncate">{action.summary ?? action.title}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0">
@@ -271,20 +318,20 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{errMsg}</div>
           )}
 
-          {!noPrinciples && facilityIds.length > 1 && (
+          {!noRequirements && facilityIds.length > 1 && (
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-3 text-xs text-brand-700">
               A classificação publicada aqui será aplicada às {facilityIds.length} barragens vinculadas a esta ação.
             </div>
           )}
 
-          {noPrinciples ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-              Esta ação não tem princípios GISTM vinculados. Ela será marcada como concluída sem registrar avaliações.
-            </div>
-          ) : isLoading ? (
+          {isLoading ? (
             <div className="flex items-center gap-3 text-gray-500 py-8 justify-center">
               <Loader2 className="w-5 h-5 animate-spin text-brand-400" />
               <span className="text-sm">Carregando requisitos vinculados...</span>
+            </div>
+          ) : noRequirements ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+              Esta ação não tem requisitos GISTM/TSM vinculados. Ela será marcada como concluída sem registrar avaliações.
             </div>
           ) : (
             <>
@@ -335,7 +382,8 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
                         {/* Row header */}
                         <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
                           onClick={() => setExpandedReq(isExpanded ? null : req.id)}>
-                          <span className="text-[11px] font-bold text-gray-400 font-mono w-8 flex-shrink-0">{req.code}</span>
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded flex-shrink-0 ${req.standard === 'tsm' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>{req.standard === 'tsm' ? 'TSM' : 'GISTM'}</span>
+                          <span className="text-[11px] font-bold text-gray-400 font-mono w-14 flex-shrink-0">{req.code}</span>
                           <p className="text-xs text-gray-600 flex-1 line-clamp-1">{req.description}</p>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             {existingAssessment && !hasIndividualOverride && (
@@ -413,7 +461,7 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between flex-shrink-0">
           <div className="text-xs text-gray-500">
-            {noPrinciples
+            {noRequirements
               ? 'A ação será marcada como concluída'
               : `${reqs.length} requisitos · avaliação em lote ou individual`}
           </div>
@@ -436,6 +484,102 @@ function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }
       </div>
     </div>
   )
+}
+
+// Calcula o ganho potencial de uma ação a partir dos vínculos finos em
+// action_requirement_links (GISTM + TSM combinados, com "share" fracionado quando
+// o mesmo requisito/indicador é endereçado por mais de uma ação, para não contar o
+// mesmo ganho potencial duas vezes). Cada padrão é normalizado pelo próprio peso
+// total (77 requisitos GISTM / 34 indicadores TSM) e as duas parcelas são somadas
+// em um único número de "ganho estimado" — mesma convenção do campo estimated_gain.
+async function computeGainFromLinks(links: any[], cycleId: string, facilityIds: string[]) {
+  const gistmLinks = links.filter(l => l.standard === 'gistm')
+  const tsmLinks = links.filter(l => l.standard === 'tsm')
+
+  const [gistmReqsRes, tsmReqsRes, allGistmRes, allTsmRes] = await Promise.all([
+    gistmLinks.length
+      ? supabase.from('gistm_requirements').select('id, code, weight, principle_id').in('id', gistmLinks.map(l => l.gistm_requirement_id))
+      : Promise.resolve({ data: [] as any[] }),
+    tsmLinks.length
+      ? supabase.from('standard_requirements').select('id, code, weight').in('id', tsmLinks.map(l => l.tsm_requirement_id))
+      : Promise.resolve({ data: [] as any[] }),
+    supabase.from('gistm_requirements').select('weight'),
+    supabase.from('standard_requirements').select('weight').eq('standard_id', 2),
+  ])
+
+  const gistmReqs = gistmReqsRes.data ?? []
+  const tsmReqs = tsmReqsRes.data ?? []
+  const gistmTotalWeight = (allGistmRes.data ?? []).reduce((s: number, r: any) => s + (Number(r.weight) || 1), 0)
+  const tsmTotalWeight = (allTsmRes.data ?? []).reduce((s: number, r: any) => s + (Number(r.weight) || 1), 0)
+
+  const gistmReqIds = gistmReqs.map((r: any) => r.id)
+  const tsmReqIds = tsmReqs.map((r: any) => r.id)
+
+  const [gistmRespRes, tsmRespRes] = await Promise.all([
+    gistmReqIds.length && facilityIds.length
+      ? supabase.from('requirement_responses').select('id, requirement_id, facility_id, status').eq('cycle_id', cycleId).in('facility_id', facilityIds).in('requirement_id', gistmReqIds)
+      : Promise.resolve({ data: [] as any[] }),
+    tsmReqIds.length && facilityIds.length
+      ? supabase.from('tsm_responses').select('id, requirement_id, facility_id, status').eq('cycle_id', cycleId).in('facility_id', facilityIds).in('requirement_id', tsmReqIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ])
+  const gistmResponses = gistmRespRes.data ?? []
+  const tsmResponses = tsmRespRes.data ?? []
+
+  const [gistmAssessRes, tsmAssessRes] = await Promise.all([
+    gistmResponses.length
+      ? supabase.from('hidrobr_assessments').select('response_id, score, score_value').in('response_id', gistmResponses.map((r: any) => r.id))
+      : Promise.resolve({ data: [] as any[] }),
+    tsmResponses.length
+      ? supabase.from('tsm_assessments').select('response_id, score, score_value').in('response_id', tsmResponses.map((r: any) => r.id))
+      : Promise.resolve({ data: [] as any[] }),
+  ])
+
+  const gistmAssessMap = new Map((gistmAssessRes.data ?? []).map((a: any) => [a.response_id, a]))
+  const tsmAssessMap = new Map((tsmAssessRes.data ?? []).map((a: any) => [a.response_id, a]))
+  const { clientScoreByRequirement: gistmScoreByReq } = buildRequirementScoreMaps(facilityIds, gistmResponses, gistmAssessMap)
+  const { clientScoreByRequirement: tsmScoreByReq } = buildRequirementScoreMaps(facilityIds, tsmResponses, tsmAssessMap)
+
+  const gistmReqById = new Map(gistmReqs.map((r: any) => [r.id, r]))
+  const tsmReqById = new Map(tsmReqs.map((r: any) => [r.id, r]))
+
+  const breakdown: any[] = []
+  let gistmGainPoints = 0
+  let tsmGainPoints = 0
+
+  gistmLinks.forEach(l => {
+    const req = gistmReqById.get(l.gistm_requirement_id)
+    if (!req) return
+    const w = Number(req.weight) || 1
+    const share = Number(l.share) || 0
+    const currentScore = gistmScoreByReq.get(req.id) ?? 0
+    const gap = (100 - currentScore) * w * share
+    gistmGainPoints += gap
+    breakdown.push({
+      code: req.code, standard: 'gistm', currentScore, weight: w, share,
+      gap: Math.round(gap), pctOfGlobal: gistmTotalWeight > 0 ? (gap / gistmTotalWeight) * 100 : 0,
+    })
+  })
+
+  tsmLinks.forEach(l => {
+    const req = tsmReqById.get(l.tsm_requirement_id)
+    if (!req) return
+    const w = Number(req.weight) || 1
+    const share = Number(l.share) || 0
+    const currentScore = tsmScoreByReq.get(req.id) ?? 0
+    const gap = (100 - currentScore) * w * share
+    tsmGainPoints += gap
+    breakdown.push({
+      code: req.code, standard: 'tsm', currentScore, weight: w, share,
+      gap: Math.round(gap), pctOfGlobal: tsmTotalWeight > 0 ? (gap / tsmTotalWeight) * 100 : 0,
+    })
+  })
+
+  const gistmGainPct = gistmTotalWeight > 0 ? (gistmGainPoints / gistmTotalWeight) * 100 : 0
+  const tsmGainPct = tsmTotalWeight > 0 ? (tsmGainPoints / tsmTotalWeight) * 100 : 0
+  const maxGain = Math.round((gistmGainPct + tsmGainPct) * 100) / 100
+
+  return { maxGain: Math.min(100, maxGain), breakdown, totalWeight: gistmTotalWeight + tsmTotalWeight }
 }
 
 // ── Modal de criação/edição de ação ───────────────────────────
@@ -475,10 +619,19 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
     },
   })
 
-  // Busca ciclo ativo da organização para calcular potencial de ganho
+  // Busca ciclo ativo da organização para calcular potencial de ganho.
+  // Duas fontes possíveis de vínculo:
+  //  - action_requirement_links: vínculo fino por requisito/indicador (GISTM e/ou TSM),
+  //    com "share" fracionado quando o mesmo requisito é endereçado por mais de uma ação
+  //    (evita contar o mesmo ganho potencial duas vezes). Usado pelas ações importadas
+  //    do Plano de Ação e por qualquer ação nova que já tenha vínculos salvos.
+  //  - principle_codes (fallback): vínculo amplo por princípio GISTM, usado por ações
+  //    criadas manualmente através do seletor de princípios (comportamento pré-existente,
+  //    mantido sem alteração — TSM não entra nesse fallback pois os códigos "TSM-Pxx" do
+  //    seletor são placeholders genéricos que não correspondem a indicadores reais).
   const { data: gainData } = useQuery({
-    queryKey: ['gain-potential', form.organization_id, form.principle_codes],
-    enabled: !!form.organization_id && form.principle_codes.length > 0,
+    queryKey: ['gain-potential', form.organization_id, form.principle_codes, item?.id],
+    enabled: !!form.organization_id,
     queryFn: async () => {
       // Busca ciclo ativo da organização
       const { data: cycles } = await supabase.from('assessment_cycles')
@@ -489,6 +642,17 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
 
       // Barragens em escopo: as selecionadas na ação, senão todas as barragens do ciclo
       const facilityIds = form.facility_ids.length > 0 ? form.facility_ids : cycleFacilityIds(cycle)
+
+      const links = item?.id
+        ? (await supabase.from('action_requirement_links')
+            .select('standard, gistm_requirement_id, tsm_requirement_id, share').eq('action_id', item.id)).data ?? []
+        : []
+
+      if (links.length > 0) {
+        return computeGainFromLinks(links, cycleId, facilityIds)
+      }
+
+      if (form.principle_codes.length === 0) return { maxGain: 0, breakdown: [], totalWeight: 0 }
 
       // Busca princípios pelos códigos selecionados
       const { data: principles } = await supabase.from('gistm_principles')
@@ -530,10 +694,12 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
         const principle = principleMap.get(req.principle_id)
         breakdown.push({
           code: req.code,
+          standard: 'gistm',
           principleCode: principle?.code ?? '',
           currentScore,
           weight: w,
           gap: Math.round(gap),
+          pctOfGlobal: totalWeight > 0 ? (gap / totalWeight) * 100 : 0,
         })
       })
 
@@ -679,14 +845,14 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
               )}
             </div>
 
-            {form.principle_codes.length === 0 ? (
-              <p className="text-xs text-brand-600">Selecione os princípios vinculados para calcular o potencial de ganho automaticamente.</p>
-            ) : !gainData ? (
+            {!gainData ? (
               <div className="flex items-center gap-2 text-xs text-brand-600">
                 <Loader2 className="w-3 h-3 animate-spin" /> Calculando potencial...
               </div>
+            ) : gainData.breakdown.length === 0 ? (
+              <p className="text-xs text-brand-600">Selecione os princípios vinculados (ou importe um vínculo por requisito) para calcular o potencial de ganho automaticamente.</p>
             ) : gainData.maxGain === 0 ? (
-              <p className="text-xs text-brand-600">Todos os requisitos desses princípios já estão conformes. Ganho potencial: 0%.</p>
+              <p className="text-xs text-brand-600">Todos os requisitos/indicadores vinculados já estão conformes. Ganho potencial: 0%.</p>
             ) : (
               <div className="space-y-3">
                 {/* Slider */}
@@ -707,30 +873,31 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
                   </div>
                 </div>
 
-                {/* Detalhamento por princípio */}
+                {/* Detalhamento por requisito/indicador (GISTM + TSM) */}
                 <div className="bg-white border border-brand-200 rounded-lg p-3">
                   <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    Requisitos pendentes dos princípios selecionados
+                    Requisitos/indicadores vinculados a esta ação
                   </div>
                   <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {gainData.breakdown.filter((r: any) => r.gap > 0).slice(0, 10).map((r: any) => (
-                      <div key={r.code} className="flex items-center gap-2 text-[11px]">
-                        <span className="font-mono text-gray-400 w-8 flex-shrink-0">{r.code}</span>
+                    {gainData.breakdown.filter((r: any) => r.gap > 0).slice(0, 10).map((r: any, i: number) => (
+                      <div key={`${r.standard}-${r.code}-${i}`} className="flex items-center gap-2 text-[11px]">
+                        <span className={`text-[9px] font-bold uppercase px-1 rounded flex-shrink-0 ${r.standard === 'tsm' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>{r.standard === 'tsm' ? 'TSM' : 'GISTM'}</span>
+                        <span className="font-mono text-gray-400 w-12 flex-shrink-0">{r.code}</span>
                         <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div className="h-full bg-brand-400 rounded-full" style={{ width: `${r.currentScore}%` }} />
                         </div>
                         <span className="text-gray-500 w-10 text-right">{r.currentScore}pts</span>
-                        <span className="text-emerald-600 w-12 text-right font-semibold">+{(r.gap / gainData.totalWeight * 100).toFixed(1)}%</span>
+                        <span className="text-emerald-600 w-12 text-right font-semibold">+{r.pctOfGlobal.toFixed(1)}%</span>
                       </div>
                     ))}
                     {gainData.breakdown.filter((r: any) => r.gap > 0).length > 10 && (
                       <div className="text-[10px] text-gray-400 text-center pt-1">
-                        +{gainData.breakdown.filter((r: any) => r.gap > 0).length - 10} requisitos adicionais
+                        +{gainData.breakdown.filter((r: any) => r.gap > 0).length - 10} requisitos/indicadores adicionais
                       </div>
                     )}
                     {gainData.breakdown.filter((r: any) => r.gap === 0).length > 0 && (
                       <div className="text-[10px] text-emerald-600 mt-1">
-                        ✓ {gainData.breakdown.filter((r: any) => r.gap === 0).length} requisitos já conformes
+                        ✓ {gainData.breakdown.filter((r: any) => r.gap === 0).length} sem ganho adicional a atribuir a esta ação (já conformes ou creditados a outra ação vinculada)
                       </div>
                     )}
                   </div>

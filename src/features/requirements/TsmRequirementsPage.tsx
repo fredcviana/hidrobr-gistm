@@ -50,6 +50,7 @@ function TsmRequirementModal({ requirement, response, cycleId, facilityId, onClo
   const [tab, setTab] = useState<'resposta' | 'avaliacao' | 'orientacao'>('resposta')
   const [text, setText] = useState(response?.implementation_text ?? '')
   const [score, setScore] = useState('')
+  const [maturityLevel, setMaturityLevel] = useState('')
   const [assessText, setAssessText] = useState('')
   const [recommendations, setRecommendations] = useState('')
   const [saving, setSaving] = useState(false)
@@ -119,11 +120,12 @@ function TsmRequirementModal({ requirement, response, cycleId, facilityId, onClo
         score_value: scoreValue,
         assessment_text: assessText.trim(),
         recommendations: recommendations.trim() || null,
+        maturity_level: maturityLevel || null,
         published_at: new Date().toISOString(),
       }, { onConflict: 'response_id' })
       if (assessError) throw new Error(`Erro ao salvar avaliação: ${assessError.message}`)
 
-      setLocalAssessment({ score, score_value: scoreValue, assessment_text: assessText.trim(), recommendations: recommendations.trim() || null, published_at: new Date().toISOString() })
+      setLocalAssessment({ score, score_value: scoreValue, assessment_text: assessText.trim(), recommendations: recommendations.trim() || null, maturity_level: maturityLevel || null, published_at: new Date().toISOString() })
       await qc.invalidateQueries({ queryKey: ['tsm-requirements'], exact: false })
       onClose()
     } catch (e: any) {
@@ -211,6 +213,12 @@ function TsmRequirementModal({ requirement, response, cycleId, facilityId, onClo
                         </div>
                         <div className="text-[10px] text-gray-400">{assessment.published_at ? new Date(assessment.published_at).toLocaleDateString('pt-BR') : ''}</div>
                       </div>
+                      {assessment.maturity_level && (
+                        <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full"
+                          style={{ background: '#1B4F7220', color: '#1B4F72' }}>
+                          Nível {assessment.maturity_level}
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-gray-700 leading-relaxed">{assessment.assessment_text}</p>
                     {assessment.recommendations && (
@@ -232,6 +240,17 @@ function TsmRequirementModal({ requirement, response, cycleId, facilityId, onClo
                           style={{ color: opt.color, background: opt.bg }}>
                           {opt.label}
                           <span className="block text-[10px] opacity-70 mt-0.5">{opt.value} pontos</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label">Nível de maturidade TSM <span className="text-gray-400 font-normal">(opcional)</span></label>
+                    <div className="flex gap-2">
+                      {['C', 'B', 'A', 'AA', 'AAA'].map(lvl => (
+                        <button key={lvl} type="button" onClick={() => setMaturityLevel(maturityLevel === lvl ? '' : lvl)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all ${maturityLevel === lvl ? 'border-brand-700 bg-brand-700 text-white' : 'border-gray-200 text-gray-500 hover:border-brand-300'}`}>
+                          {lvl}
                         </button>
                       ))}
                     </div>
@@ -336,6 +355,11 @@ function TsmRequirementRow({ req, response, onSelect }: { req: any; response: an
         <p className="text-sm font-semibold text-gray-800 truncate">{req.title}</p>
         {req.description && <p className="text-xs text-gray-400 truncate mt-0.5">{req.description.slice(0, 80)}...</p>}
       </div>
+      {assessment?.maturity_level && (
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: '#1B4F7220', color: '#1B4F72' }}>
+          Nível {assessment.maturity_level}
+        </span>
+      )}
       {assessment && (
         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
           style={{ color: SCORE_OPTIONS.find(s => s.key === assessment.score)?.color, background: SCORE_OPTIONS.find(s => s.key === assessment.score)?.bg }}>
