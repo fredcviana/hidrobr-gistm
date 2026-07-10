@@ -28,8 +28,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ── Modal do requisito ─────────────────────────────────────────
-function RequirementModal({ requirement, response, cycleId, principleCode, onClose }: {
-  requirement: any; response: any; cycleId: string; principleCode: string; onClose: () => void
+function RequirementModal({ requirement, response, cycleId, facilityId, principleCode, onClose }: {
+  requirement: any; response: any; cycleId: string; facilityId: string; principleCode: string; onClose: () => void
 }) {
   const { profile } = useAuthStore()
   const hb = isHidrobr(profile?.role)
@@ -67,6 +67,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
     } else {
       const { data, error } = await supabase.from('requirement_responses').insert({
         cycle_id: cycleId,
+        facility_id: facilityId,
         requirement_id: requirement.id,
         implementation_text: text,
         responsible_person: responsible || null,
@@ -82,7 +83,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
     setSaving(true); setErrMsg(''); setSuccessMsg('')
     try {
       await ensureResponse(newStatus)
-      await qc.invalidateQueries({ queryKey: ['requirements-v3'] })
+      await qc.invalidateQueries({ queryKey: ['requirements-v3'], exact: false })
       onClose()
     } catch (e: any) {
       setErrMsg(e.message ?? 'Erro ao salvar')
@@ -152,7 +153,7 @@ function RequirementModal({ requirement, response, cycleId, principleCode, onClo
         recommendations: recommendations.trim() || null,
         published_at: new Date().toISOString(),
       })
-      await qc.invalidateQueries({ queryKey: ['requirements-v3'] })
+      await qc.invalidateQueries({ queryKey: ['requirements-v3'], exact: false })
       onClose()
     } catch (e: any) {
       setErrMsg(e.message ?? 'Erro desconhecido ao publicar avaliação')
@@ -451,8 +452,8 @@ function RequirementRow({ req, response, onSelect }: { req: any; response: any; 
   )
 }
 
-function PrincipleCard({ principle, requirements, responseMap, topicColor, cycleId }: {
-  principle: any; requirements: any[]; responseMap: Map<number, any>; topicColor: string; cycleId: string
+function PrincipleCard({ principle, requirements, responseMap, topicColor, cycleId, facilityId }: {
+  principle: any; requirements: any[]; responseMap: Map<number, any>; topicColor: string; cycleId: string; facilityId: string
 }) {
   const [open, setOpen] = useState(false)
   const [selectedReq, setSelectedReq] = useState<any>(null)
@@ -501,6 +502,7 @@ function PrincipleCard({ principle, requirements, responseMap, topicColor, cycle
           requirement={selectedReq}
           response={responseMap.get(selectedReq.id) ?? null}
           cycleId={cycleId}
+          facilityId={facilityId}
           principleCode={principle.code}
           onClose={() => setSelectedReq(null)}
         />
@@ -509,8 +511,8 @@ function PrincipleCard({ principle, requirements, responseMap, topicColor, cycle
   )
 }
 
-function TopicSection({ topic, principles, requirementsByPrinciple, responseMap, cycleId }: {
-  topic: any; principles: any[]; requirementsByPrinciple: Map<number, any[]>; responseMap: Map<number, any>; cycleId: string
+function TopicSection({ topic, principles, requirementsByPrinciple, responseMap, cycleId, facilityId }: {
+  topic: any; principles: any[]; requirementsByPrinciple: Map<number, any[]>; responseMap: Map<number, any>; cycleId: string; facilityId: string
 }) {
   const [open, setOpen] = useState(topic.code === 'T1')
   const allReqs = principles.flatMap(p => requirementsByPrinciple.get(p.id) ?? [])
@@ -534,7 +536,7 @@ function TopicSection({ topic, principles, requirementsByPrinciple, responseMap,
           {principles.map(p => (
             <PrincipleCard key={p.id} principle={p}
               requirements={requirementsByPrinciple.get(p.id) ?? []}
-              responseMap={responseMap} topicColor={topic.color_hex} cycleId={cycleId} />
+              responseMap={responseMap} topicColor={topic.color_hex} cycleId={cycleId} facilityId={facilityId} />
           ))}
         </div>
       )}
@@ -546,13 +548,14 @@ export function RequirementsPage() {
   const { profile } = useAuthStore()
   const hb = isHidrobr(profile?.role)
   const [selectedCycleId, setSelectedCycleId] = useState('')
+  const [selectedFacilityId, setSelectedFacilityId] = useState('')
 
   const { data: cycles } = useQuery({
     queryKey: ['cycles-req', profile?.organization_id, hb],
     enabled: !!profile,
     queryFn: async () => {
       let q = supabase.from('assessment_cycles')
-        .select('id,name,organization_id,organizations(name)')
+        .select('id,name,organization_id,facility_id,facility_ids,organizations(name)')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
       if (!hb && profile?.organization_id) q = q.eq('organization_id', profile.organization_id)
@@ -563,15 +566,32 @@ export function RequirementsPage() {
   })
 
   const cycleId = selectedCycleId || cycles?.[0]?.id || ''
+  const cycle = cycles?.find((c: any) => c.id === cycleId)
+  // ids das barragens em escopo neste ciclo (compat.: alguns ciclos antigos só têm facility_id singular)
+  const cycleFacilityIds: string[] = (cycle?.facility_ids?.length ? cycle.facility_ids : (cycle?.facility_id ? [cycle.facility_id] : []))
+
+  const { data: facilities } = useQuery({
+    queryKey: ['cycle-facilities-req', cycleId, cycleFacilityIds.join(',')],
+    enabled: !!cycleId && cycleFacilityIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase.from('tailings_facilities').select('id,name,dam_code').in('id', cycleFacilityIds).order('name')
+      const list = data ?? []
+      if (list.length && !selectedFacilityId) setSelectedFacilityId(list[0].id)
+      return list
+    },
+  })
+
+  const facilityId = selectedFacilityId || facilities?.[0]?.id || ''
 
   const { data, isLoading } = useQuery({
-    queryKey: ['requirements-v3', cycleId],
-    enabled: !!cycleId,
+    queryKey: ['requirements-v3', cycleId, facilityId],
+    enabled: !!cycleId && !!facilityId,
     queryFn: async () => {
       const { data: topics } = await supabase.from('gistm_topics').select('*').order('display_order')
       const { data: principles } = await supabase.from('gistm_principles').select('*').order('display_order')
       const { data: requirements } = await supabase.from('gistm_requirements').select('*').order('display_order')
-      const { data: responses } = await supabase.from('requirement_responses').select('*').eq('cycle_id', cycleId)
+      const { data: responses } = await supabase.from('requirement_responses').select('*')
+        .eq('cycle_id', cycleId).eq('facility_id', facilityId)
 
       // Busca avaliações separadamente (join aninhado não funciona com FK response_id)
       const responseIds = (responses ?? []).map((r: any) => r.id)
@@ -605,6 +625,14 @@ export function RequirementsPage() {
     </div></div>
   )
 
+  if (!facilityId) return (
+    <div className="p-6"><div className="card p-10 text-center">
+      <AlertCircle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+      <p className="text-gray-600 font-medium">Nenhuma barragem vinculada a este ciclo</p>
+      <p className="text-gray-400 text-sm mt-1">{hb ? 'Associe ao menos uma barragem ao ciclo na página de Clientes.' : 'Contate a HIDROBR.'}</p>
+    </div></div>
+  )
+
   if (isLoading) return (
     <div className="p-6 flex items-center gap-3 text-gray-500">
       <Loader2 className="w-5 h-5 animate-spin text-brand-400" />
@@ -629,7 +657,7 @@ export function RequirementsPage() {
   const approved = responses.filter((r: any) => r.status === 'approved').length
   const pending = responses.filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length
   const notStarted = totalReqs - responses.length + responses.filter((r: any) => r.status === 'not_started').length
-  const cycle = cycles?.find((c: any) => c.id === cycleId)
+  const currentFacility = facilities?.find((f: any) => f.id === facilityId)
 
   return (
     <div className="p-6">
@@ -641,11 +669,30 @@ export function RequirementsPage() {
           </p>
         </div>
         {hb && (cycles?.length ?? 0) > 1 && (
-          <select className="form-input w-auto text-xs" value={cycleId} onChange={e => setSelectedCycleId(e.target.value)}>
+          <select className="form-input w-auto text-xs" value={cycleId} onChange={e => { setSelectedCycleId(e.target.value); setSelectedFacilityId('') }}>
             {(cycles ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.organizations?.name} — {c.name}</option>)}
           </select>
         )}
       </div>
+
+      {(facilities?.length ?? 0) > 1 && (
+        <div className="mb-5">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            Avaliação por barragem — a conformidade do cliente é a resultante (média) entre todas as barragens
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {facilities!.map((f: any) => (
+              <button key={f.id} onClick={() => setSelectedFacilityId(f.id)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors ${facilityId === f.id ? 'bg-brand-700 text-white border-brand-700' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300'}`}>
+                {f.name}{f.dam_code ? ` · ${f.dam_code}` : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {(facilities?.length ?? 0) === 1 && currentFacility && (
+        <p className="text-xs text-gray-400 mb-4">Barragem avaliada: <strong className="text-gray-600">{currentFacility.name}</strong></p>
+      )}
 
       <div className="grid grid-cols-4 gap-3 mb-5">
         {[
@@ -666,7 +713,7 @@ export function RequirementsPage() {
         if (tPrinciples.length === 0) return null
         return (
           <TopicSection key={topic.id} topic={topic} principles={tPrinciples}
-            requirementsByPrinciple={requirementsByPrinciple} responseMap={responseMap} cycleId={cycleId} />
+            requirementsByPrinciple={requirementsByPrinciple} responseMap={responseMap} cycleId={cycleId} facilityId={facilityId} />
         )
       })}
     </div>

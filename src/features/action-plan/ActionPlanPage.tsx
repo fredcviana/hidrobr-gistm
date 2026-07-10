@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Loader2, X, Save, CheckCircle2, Clock, AlertTriangle, Circle, ChevronDown, Building2, ChevronUp } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
+import { cycleFacilityIds, buildRequirementScoreMaps } from '@/lib/facilityScoring'
 
 const PRIORITY: Record<string, { label: string; cls: string }> = {
   critical: { label: 'Crítica',  cls: 'bg-red-100 text-red-700' },
@@ -76,8 +77,8 @@ function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v:
 }
 
 // ── Modal de Reavaliação ──────────────────────────────────────
-function ReassessmentModal({ action, cycleId, onClose, onComplete }: {
-  action: any; cycleId: string; onClose: () => void; onComplete: () => void
+function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }: {
+  action: any; cycleId: string; facilityIds: string[]; onClose: () => void; onComplete: () => void
 }) {
   const { profile } = useAuthStore()
   const qc = useQueryClient()
@@ -92,8 +93,8 @@ function ReassessmentModal({ action, cycleId, onClose, onComplete }: {
 
   // Busca requisitos vinculados aos princípios da ação
   const { data: requirements, isLoading } = useQuery({
-    queryKey: ['action-requirements', action.principle_codes, cycleId],
-    enabled: !!(action.principle_codes?.length) && !!cycleId,
+    queryKey: ['action-requirements', action.principle_codes, cycleId, facilityIds.join(',')],
+    enabled: !!(action.principle_codes?.length) && !!cycleId && facilityIds.length > 0,
     queryFn: async () => {
       // Busca os princípios pelo código
       const { data: principles } = await supabase.from('gistm_principles')
@@ -109,23 +110,35 @@ function ReassessmentModal({ action, cycleId, onClose, onComplete }: {
         .in('principle_id', principleIds)
         .order('display_order')
 
-      // Busca respostas existentes no ciclo
+      // Busca respostas existentes no ciclo, em TODAS as barragens em escopo da ação
       const reqIds = (reqs ?? []).map((r: any) => r.id)
       const { data: responses } = reqIds.length > 0
         ? await supabase.from('requirement_responses')
-            .select('id, requirement_id, status, implementation_text, hidrobr_assessments(id, score, score_value, assessment_text)')
+            .select('id, requirement_id, facility_id, status, implementation_text, hidrobr_assessments(id, score, score_value, assessment_text)')
             .eq('cycle_id', cycleId)
+            .in('facility_id', facilityIds)
             .in('requirement_id', reqIds)
         : { data: [] }
 
-      const respMap = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
+      // responsesByFacility[requirement_id] = Map<facility_id, response>
+      const responsesByFacility = new Map<string, Map<string, any>>()
+      ;(responses ?? []).forEach((r: any) => {
+        if (!responsesByFacility.has(r.requirement_id)) responsesByFacility.set(r.requirement_id, new Map())
+        responsesByFacility.get(r.requirement_id)!.set(r.facility_id, r)
+      })
       const principleMap = new Map((principles ?? []).map((p: any) => [p.id, p]))
 
-      return (reqs ?? []).map((req: any) => ({
-        ...req,
-        principle: principleMap.get(req.principle_id),
-        response: respMap.get(req.id) ?? null,
-      }))
+      return (reqs ?? []).map((req: any) => {
+        const byFacility = responsesByFacility.get(req.id) ?? new Map()
+        // resposta "representativa" (primeira barragem com dado) só para mostrar um preview no formulário
+        const response = facilityIds.map((fid: string) => byFacility.get(fid)).find(Boolean) ?? null
+        return {
+          ...req,
+          principle: principleMap.get(req.principle_id),
+          response,
+          responsesByFacility: byFacility,
+        }
+      })
     },
   })
 
@@ -174,39 +187,44 @@ function ReassessmentModal({ action, cycleId, onClose, onComplete }: {
         const finalText = (state.text || globalText).trim()
         if (!finalScore || finalText.length < 10) continue
 
-        let responseId = req.response?.id
-
-        // Cria ou atualiza a resposta do cliente
-        if (!responseId) {
-          const { data: newResp, error: respErr } = await supabase
-            .from('requirement_responses').insert({
-              cycle_id: cycleId,
-              requirement_id: req.id,
-              implementation_text: state.responseText || 'Atendimento vinculado ao plano de ação.',
-              status: ['fully_conforming','conforming'].includes(finalScore) ? 'approved' : 'needs_revision',
-              submitted_at: new Date().toISOString(),
-            }).select('id').single()
-          if (respErr) throw new Error(`Erro ao criar resposta ${req.code}: ${respErr.message}`)
-          responseId = newResp.id
-        } else {
-          const newStatus = ['fully_conforming','conforming'].includes(finalScore) ? 'approved' : 'needs_revision'
-          await supabase.from('requirement_responses').update({
-            status: newStatus,
-            implementation_text: state.responseText || req.response?.implementation_text || 'Atendimento vinculado ao plano de ação.',
-            updated_at: new Date().toISOString(),
-          }).eq('id', responseId)
-        }
-
-        // Upsert da avaliação
+        const newStatus = ['fully_conforming', 'conforming'].includes(finalScore) ? 'approved' : 'needs_revision'
         const scoreValue = SCORE_OPTIONS.find(s => s.key === finalScore)?.value ?? 0
-        await supabase.from('hidrobr_assessments').upsert({
-          response_id: responseId,
-          assessed_by: profile!.id,
-          score: finalScore,
-          score_value: scoreValue,
-          assessment_text: finalText,
-          published_at: new Date().toISOString(),
-        }, { onConflict: 'response_id' })
+
+        // Aplica a mesma classificação/parecer em cada barragem em escopo da ação
+        for (const facilityId of facilityIds) {
+          const existing = req.responsesByFacility?.get(facilityId)
+          let responseId = existing?.id
+
+          if (!responseId) {
+            const { data: newResp, error: respErr } = await supabase
+              .from('requirement_responses').insert({
+                cycle_id: cycleId,
+                facility_id: facilityId,
+                requirement_id: req.id,
+                implementation_text: state.responseText || 'Atendimento vinculado ao plano de ação.',
+                status: newStatus,
+                submitted_at: new Date().toISOString(),
+              }).select('id').single()
+            if (respErr) throw new Error(`Erro ao criar resposta ${req.code}: ${respErr.message}`)
+            responseId = newResp.id
+          } else {
+            await supabase.from('requirement_responses').update({
+              status: newStatus,
+              implementation_text: state.responseText || existing?.implementation_text || 'Atendimento vinculado ao plano de ação.',
+              updated_at: new Date().toISOString(),
+            }).eq('id', responseId)
+          }
+
+          // Upsert da avaliação
+          await supabase.from('hidrobr_assessments').upsert({
+            response_id: responseId,
+            assessed_by: profile!.id,
+            score: finalScore,
+            score_value: scoreValue,
+            assessment_text: finalText,
+            published_at: new Date().toISOString(),
+          }, { onConflict: 'response_id' })
+        }
       }
 
       // Marca ação como concluída
@@ -251,6 +269,12 @@ function ReassessmentModal({ action, cycleId, onClose, onComplete }: {
         <div className="overflow-y-auto flex-1 p-6 space-y-5">
           {errMsg && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{errMsg}</div>
+          )}
+
+          {!noPrinciples && facilityIds.length > 1 && (
+            <div className="bg-brand-50 border border-brand-200 rounded-xl p-3 text-xs text-brand-700">
+              A classificação publicada aqui será aplicada às {facilityIds.length} barragens vinculadas a esta ação.
+            </div>
           )}
 
           {noPrinciples ? (
@@ -458,9 +482,13 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
     queryFn: async () => {
       // Busca ciclo ativo da organização
       const { data: cycles } = await supabase.from('assessment_cycles')
-        .select('id').eq('organization_id', form.organization_id).eq('status', 'active').limit(1)
-      const cycleId = cycles?.[0]?.id
+        .select('id, facility_id, facility_ids').eq('organization_id', form.organization_id).eq('status', 'active').limit(1)
+      const cycle = cycles?.[0]
+      const cycleId = cycle?.id
       if (!cycleId) return { maxGain: 0, breakdown: [], totalWeight: 0 }
+
+      // Barragens em escopo: as selecionadas na ação, senão todas as barragens do ciclo
+      const facilityIds = form.facility_ids.length > 0 ? form.facility_ids : cycleFacilityIds(cycle)
 
       // Busca princípios pelos códigos selecionados
       const { data: principles } = await supabase.from('gistm_principles')
@@ -471,11 +499,11 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
       const { data: reqs } = await supabase.from('gistm_requirements')
         .select('id, code, weight, principle_id').in('principle_id', principles.map((p: any) => p.id))
 
-      // Busca respostas e avaliações existentes no ciclo
+      // Busca respostas e avaliações existentes no ciclo, escopadas às barragens da ação
       const reqIds = (reqs ?? []).map((r: any) => r.id)
-      const { data: responses } = reqIds.length > 0
+      const { data: responses } = reqIds.length > 0 && facilityIds.length > 0
         ? await supabase.from('requirement_responses')
-            .select('id, requirement_id, status').eq('cycle_id', cycleId).in('requirement_id', reqIds)
+            .select('id, requirement_id, facility_id, status').eq('cycle_id', cycleId).in('facility_id', facilityIds).in('requirement_id', reqIds)
         : { data: [] }
       const { data: assessments } = (responses ?? []).length > 0
         ? await supabase.from('hidrobr_assessments')
@@ -486,9 +514,9 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
       const { data: allReqs } = await supabase.from('gistm_requirements').select('weight')
       const totalWeight = (allReqs ?? []).reduce((s: number, r: any) => s + (Number(r.weight) || 1), 0)
 
-      // Calcula ganho potencial por requisito
-      const respMap = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
+      // Score do requisito = média simples entre as barragens em escopo (mesma regra do dashboard)
       const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
+      const { clientScoreByRequirement } = buildRequirementScoreMaps(facilityIds, responses ?? [], assessMap)
       const principleMap = new Map((principles ?? []).map((p: any) => [p.id, p]))
 
       let maxGainPoints = 0
@@ -496,8 +524,7 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
 
       ;(reqs ?? []).forEach((req: any) => {
         const w = Number(req.weight) || 1
-        const resp = respMap.get(req.id)
-        const currentScore = resp ? (assessMap.get(resp.id)?.score_value ?? 0) : 0
+        const currentScore = clientScoreByRequirement.get(req.id) ?? 0
         const gap = (100 - currentScore) * w // pontos que faltam, ponderados
         maxGainPoints += gap
         const principle = principleMap.get(req.principle_id)
@@ -507,7 +534,6 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
           currentScore,
           weight: w,
           gap: Math.round(gap),
-          status: resp?.status ?? 'not_started',
         })
       })
 
@@ -820,7 +846,7 @@ export function ActionPlanPage() {
     queryKey: ['active-cycle-for-action', orgId, hb],
     enabled: !!profile,
     queryFn: async () => {
-      let q = supabase.from('assessment_cycles').select('id,name').eq('status', 'active').order('created_at', { ascending: false }).limit(1)
+      let q = supabase.from('assessment_cycles').select('id,name,facility_id,facility_ids').eq('status', 'active').order('created_at', { ascending: false }).limit(1)
       if (!hb && orgId) q = q.eq('organization_id', orgId)
       const { data } = await q
       return data?.[0] ?? null
@@ -870,13 +896,17 @@ export function ActionPlanPage() {
     enabled: !!completing?.organization_id,
     queryFn: async () => {
       const { data } = await supabase.from('assessment_cycles')
-        .select('id,name').eq('status', 'active').eq('organization_id', completing.organization_id)
+        .select('id,name,facility_id,facility_ids').eq('status', 'active').eq('organization_id', completing.organization_id)
         .order('created_at', { ascending: false }).limit(1)
       return data?.[0] ?? null
     },
   })
 
   const cycleForReassess = completing ? (completingCycle?.id ?? activeCycle?.id ?? '') : ''
+  const reassessCycleObj = completing ? (completingCycle ?? activeCycle ?? null) : null
+  const facilityIdsForReassess = completing
+    ? ((completing.facility_ids?.length ? completing.facility_ids : cycleFacilityIds(reassessCycleObj)))
+    : []
 
   return (
     <div className="p-6">
@@ -959,6 +989,7 @@ export function ActionPlanPage() {
         <ReassessmentModal
           action={completing}
           cycleId={cycleForReassess}
+          facilityIds={facilityIdsForReassess}
           onClose={() => setCompleting(null)}
           onComplete={() => setCompleting(null)}
         />

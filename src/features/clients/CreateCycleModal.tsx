@@ -84,7 +84,7 @@ export function CreateCycleModal({ orgId, orgName, onClose }: Props) {
             <label className="form-label">
               Estruturas associadas *
               <span className="text-gray-400 font-normal ml-1">
-                (selecione uma ou mais barragens)
+                (cada barragem selecionada será avaliada individualmente; o resultado do cliente é a média entre elas)
               </span>
             </label>
             {(facilities ?? []).length === 0 ? (

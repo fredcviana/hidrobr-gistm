@@ -87,6 +87,7 @@ function ConvertModal({ lead, onClose }: { lead: any; onClose: () => void }) {
           const status = score >= 75 ? 'submitted' : score >= 50 ? 'in_progress' : 'in_progress'
           insertResponses.push({
             cycle_id: cycle.id,
+            facility_id: facility.id,
             requirement_id: req.id,
             implementation_text: `Pré-preenchido via Self Assessment público (${new Date().toLocaleDateString('pt-BR')}). Score declarado: ${score}/100.`,
             status,

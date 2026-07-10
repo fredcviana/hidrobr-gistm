@@ -1,9 +1,11 @@
 // src/features/dashboard/DashboardPage.tsx
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Legend } from 'recharts'
-import { Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle, Layers } from 'lucide-react'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 import { supabase } from '@/lib/supabase'
+import { cycleFacilityIds, buildRequirementScoreMaps } from '@/lib/facilityScoring'
 
 const TOPIC_COLORS: Record<string, string> = {
   T1: '#1B4F72', T2: '#117A65', T3: '#7D6608',
@@ -217,14 +219,18 @@ export function DashboardPage() {
         cycle: null, overallScore: 0, projectedScore: 0,
         kpis: { total: 0, approved: 0, pending: 0, notStarted: 0 },
         principleScores: [], timelineData: [], actionKpis: { total: 0, open: 0, completed: 0, totalGain: 0 },
-        topicProgressData: [],
+        topicProgressData: [], facilityCount: 0,
       }
+
+      const facilityIds = cycleFacilityIds(cycle)
 
       // Busca tudo separadamente
       const { data: topics } = await supabase.from('gistm_topics').select('*').order('display_order')
       const { data: principles } = await supabase.from('gistm_principles').select('*').order('display_order')
       const { data: requirements } = await supabase.from('gistm_requirements').select('*')
-      const { data: responses } = await supabase.from('requirement_responses').select('*').eq('cycle_id', cycle.id)
+      const { data: responses } = facilityIds.length > 0
+        ? await supabase.from('requirement_responses').select('*').eq('cycle_id', cycle.id).in('facility_id', facilityIds)
+        : { data: [] as any[] }
       const { data: assessments } = await supabase.from('hidrobr_assessments')
         .select('response_id, score, score_value, published_at')
         .in('response_id', (responses ?? []).map((r: any) => r.id))
@@ -234,24 +240,21 @@ export function DashboardPage() {
 
       const actionsArr = Array.isArray(actionsRaw) ? actionsRaw : []
       const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
-      const respByReqId = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
-      const reqWeightMap = new Map((requirements ?? []).map((r: any) => [r.id, Number(r.weight) || 1]))
+
+      // Resultado do requisito no cliente = média simples entre as barragens em escopo
+      const { clientScoreByRequirement } = buildRequirementScoreMaps(facilityIds, responses ?? [], assessMap)
 
       // Score global — todos os 77 requisitos no denominador
       let globalWeightedSum = 0, globalTotalWeight = 0
       ;(requirements ?? []).forEach((req: any) => {
         const w = Number(req.weight) || 1
         globalTotalWeight += w
-        const resp = respByReqId.get(req.id)
-        if (resp) {
-          const sv = assessMap.get(resp.id)?.score_value
-          if (sv != null) globalWeightedSum += sv * w
-        }
+        globalWeightedSum += (clientScoreByRequirement.get(req.id) ?? 0) * w
       })
       const overallScore = globalTotalWeight > 0 ? Math.round(globalWeightedSum / globalTotalWeight) : 0
 
-      // KPIs
-      const totalReqs = (requirements ?? []).length
+      // KPIs — contam instâncias requisito×barragem (cada barragem responde cada requisito)
+      const totalReqs = (requirements ?? []).length * (facilityIds.length || 1)
       const approved = (responses ?? []).filter((r: any) => r.status === 'approved').length
       const pending = (responses ?? []).filter((r: any) => ['submitted', 'under_review'].includes(r.status)).length
       const notStarted = totalReqs - (responses ?? []).length + (responses ?? []).filter((r: any) => r.status === 'not_started').length
@@ -268,11 +271,7 @@ export function DashboardPage() {
         pReqs.forEach((req: any) => {
           const w = Number(req.weight) || 1
           wTotal += w
-          const resp = respByReqId.get(req.id)
-          if (resp) {
-            const sv = assessMap.get(resp.id)?.score_value
-            if (sv != null) wSum += sv * w
-          }
+          wSum += (clientScoreByRequirement.get(req.id) ?? 0) * w
         })
         const atual = wTotal > 0 ? Math.round(wSum / wTotal) : 0
 
@@ -348,15 +347,12 @@ export function DashboardPage() {
         pastDates.forEach(d => {
           const assessUntilDate = (assessments ?? []).filter((a: any) => a.published_at && a.published_at.slice(0, 10) <= d)
           const assessUntilMap = new Map(assessUntilDate.map((a: any) => [a.response_id, a]))
+          const { clientScoreByRequirement: scoreAtDate } = buildRequirementScoreMaps(facilityIds, responses ?? [], assessUntilMap)
           let wSum = 0, wTotal = 0
           ;(requirements ?? []).forEach((req: any) => {
             const w = Number(req.weight) || 1
             wTotal += w
-            const resp = respByReqId.get(req.id)
-            if (resp) {
-              const sv = assessUntilMap.get(resp.id)?.score_value
-              if (sv != null) wSum += sv * w
-            }
+            wSum += (scoreAtDate.get(req.id) ?? 0) * w
           })
           const score = wTotal > 0 ? Math.round(wSum / wTotal) : 0
           const [year, month, day] = d.split('-')
@@ -370,22 +366,20 @@ export function DashboardPage() {
       const topicProgressData = (topics ?? []).map((topic: any, i: number) => {
         const tPrinciples = (principles ?? []).filter((p: any) => p.topic_id === topic.id)
         const tReqs = (requirements ?? []).filter((r: any) => tPrinciples.some((p: any) => p.id === r.principle_id))
-        const tApproved = tReqs.filter((r: any) => respByReqId.get(r.id)?.status === 'approved').length
+        const tReqIds = new Set(tReqs.map((r: any) => r.id))
+        const tInstances = (responses ?? []).filter((r: any) => tReqIds.has(r.requirement_id))
+        const tApproved = tInstances.filter((r: any) => r.status === 'approved').length
         let wSum = 0, wTotal = 0
         tReqs.forEach((req: any) => {
           const w = Number(req.weight) || 1
           wTotal += w
-          const resp = respByReqId.get(req.id)
-          if (resp) {
-            const sv = assessMap.get(resp.id)?.score_value
-            if (sv != null) wSum += sv * w
-          }
+          wSum += (clientScoreByRequirement.get(req.id) ?? 0) * w
         })
         return {
           code: topic.code,
           name: topic.title,
           score: wTotal > 0 ? Math.round(wSum / wTotal) : 0,
-          pct: tReqs.length > 0 ? Math.round((tApproved / tReqs.length) * 100) : 0,
+          pct: tInstances.length > 0 ? Math.round((tApproved / tInstances.length) * 100) : 0,
           color: Object.values(TOPIC_COLORS)[i] ?? '#0A9396',
         }
       })
@@ -393,7 +387,7 @@ export function DashboardPage() {
       return {
         cycle, overallScore, projectedScore,
         kpis: { total: totalReqs, approved, pending, notStarted },
-        principleScores, timelineData, topicProgressData,
+        principleScores, timelineData, topicProgressData, facilityCount: facilityIds.length,
         actionKpis: {
           total: actionsArr.length,
           open: openActions.length,
@@ -423,7 +417,7 @@ export function DashboardPage() {
 
   if (!data) return null
 
-  const { cycle, overallScore, projectedScore, kpis, principleScores, timelineData, topicProgressData, actionKpis } = data
+  const { cycle, overallScore, projectedScore, kpis, principleScores, timelineData, topicProgressData, actionKpis, facilityCount } = data
   const gap = projectedScore - overallScore
 
   if (!cycle) return (
@@ -444,11 +438,21 @@ export function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{cycle.name} · {cycle.organizations?.name}</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {cycle.name} · {cycle.organizations?.name}
+            {facilityCount > 1 && <span className="text-gray-400"> · resultado consolidado de {facilityCount} barragens</span>}
+          </p>
         </div>
-        <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Ciclo ativo
-        </span>
+        <div className="flex items-center gap-2">
+          {facilityCount > 1 && (
+            <Link to="/dashboard-barragens" className="badge bg-brand-50 text-brand-700 border border-brand-200 inline-flex items-center gap-1.5 hover:bg-brand-100 transition-colors">
+              <Layers className="w-3 h-3" /> Comparar barragens
+            </Link>
+          )}
+          <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Ciclo ativo
+          </span>
+        </div>
       </div>
 
       {/* KPIs */}

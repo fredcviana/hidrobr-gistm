@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, ChevronDown, Loader2, X, Save, AlertCircle, CheckCircle2, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
+import { cycleFacilityIds } from '@/lib/facilityScoring'
 
 const TSM_STANDARD_ID = 2
 
@@ -39,8 +40,8 @@ const SCORE_OPTIONS = [
 ]
 
 // ── Modal de requisito ────────────────────────────────────────
-function TsmRequirementModal({ requirement, response, cycleId, onClose }: {
-  requirement: any; response: any; cycleId: string; onClose: () => void
+function TsmRequirementModal({ requirement, response, cycleId, facilityId, onClose }: {
+  requirement: any; response: any; cycleId: string; facilityId: string; onClose: () => void
 }) {
   const { profile } = useAuthStore()
   const hb = isHidrobr(profile?.role)
@@ -74,6 +75,7 @@ function TsmRequirementModal({ requirement, response, cycleId, onClose }: {
     } else {
       const { data, error } = await supabase.from('tsm_responses').insert({
         cycle_id: cycleId,
+        facility_id: facilityId,
         requirement_id: requirement.id,
         implementation_text: text,
         status: newStatus ?? 'in_progress',
@@ -87,7 +89,7 @@ function TsmRequirementModal({ requirement, response, cycleId, onClose }: {
     setSaving(true); setErrMsg('')
     try {
       await ensureResponse(newStatus)
-      await qc.invalidateQueries({ queryKey: ['tsm-requirements'] })
+      await qc.invalidateQueries({ queryKey: ['tsm-requirements'], exact: false })
       onClose()
     } catch (e: any) {
       setErrMsg(e.message ?? 'Erro ao salvar')
@@ -122,7 +124,7 @@ function TsmRequirementModal({ requirement, response, cycleId, onClose }: {
       if (assessError) throw new Error(`Erro ao salvar avaliação: ${assessError.message}`)
 
       setLocalAssessment({ score, score_value: scoreValue, assessment_text: assessText.trim(), recommendations: recommendations.trim() || null, published_at: new Date().toISOString() })
-      await qc.invalidateQueries({ queryKey: ['tsm-requirements'] })
+      await qc.invalidateQueries({ queryKey: ['tsm-requirements'], exact: false })
       onClose()
     } catch (e: any) {
       setErrMsg(e.message ?? 'Erro ao publicar avaliação')
@@ -355,6 +357,7 @@ export function TsmRequirementsPage() {
   const hb = isHidrobr(profile?.role)
   const orgId = profile?.organization_id
   const [selectedCycleId, setSelectedCycleId] = useState('')
+  const [selectedFacilityId, setSelectedFacilityId] = useState('')
   const [selectedReq, setSelectedReq] = useState<{ req: any; response: any } | null>(null)
   const [topicFilter, setTopicFilter] = useState<number | null>(null)
 
@@ -363,7 +366,7 @@ export function TsmRequirementsPage() {
     enabled: !!profile,
     queryFn: async () => {
       let q = supabase.from('assessment_cycles')
-        .select('id, name, organizations(name)').eq('status', 'active')
+        .select('id, name, facility_id, facility_ids, organizations(name)').eq('status', 'active')
         .order('created_at', { ascending: false }).limit(10)
       if (!hb && orgId) q = q.eq('organization_id', orgId)
       const { data } = await q
@@ -372,10 +375,25 @@ export function TsmRequirementsPage() {
   })
 
   const cycleId = selectedCycleId || cycles?.[0]?.id || ''
+  const cycle = cycles?.find((c: any) => c.id === cycleId)
+  const cycleFacilityIdList = cycleFacilityIds(cycle)
+
+  const { data: facilities } = useQuery({
+    queryKey: ['cycle-facilities-tsm', cycleId, cycleFacilityIdList.join(',')],
+    enabled: !!cycleId && cycleFacilityIdList.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase.from('tailings_facilities').select('id,name,dam_code').in('id', cycleFacilityIdList).order('name')
+      const list = data ?? []
+      if (list.length && !selectedFacilityId) setSelectedFacilityId(list[0].id)
+      return list
+    },
+  })
+
+  const facilityId = selectedFacilityId || facilities?.[0]?.id || ''
 
   const { data, isLoading } = useQuery({
-    queryKey: ['tsm-requirements', cycleId],
-    enabled: !!cycleId,
+    queryKey: ['tsm-requirements', cycleId, facilityId],
+    enabled: !!cycleId && !!facilityId,
     queryFn: async () => {
       // Busca tópicos e requisitos TSM
       const { data: topics } = await supabase.from('standard_topics')
@@ -383,11 +401,11 @@ export function TsmRequirementsPage() {
       const { data: requirements } = await supabase.from('standard_requirements')
         .select('*').eq('standard_id', TSM_STANDARD_ID).order('display_order')
 
-      // Busca respostas do ciclo
+      // Busca respostas do ciclo, escopadas à barragem selecionada
       const reqIds = (requirements ?? []).map((r: any) => r.id)
       const { data: responses } = reqIds.length > 0
         ? await supabase.from('tsm_responses').select('*')
-            .eq('cycle_id', cycleId).in('requirement_id', reqIds)
+            .eq('cycle_id', cycleId).eq('facility_id', facilityId).in('requirement_id', reqIds)
         : { data: [] }
 
       // Busca avaliações separadamente
@@ -435,24 +453,47 @@ export function TsmRequirementsPage() {
     </div></div>
   )
 
+  if (!facilityId) return (
+    <div className="p-6"><div className="card p-10 text-center">
+      <AlertCircle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+      <p className="text-gray-600 font-medium">Nenhuma barragem vinculada a este ciclo</p>
+    </div></div>
+  )
+
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Requisitos TSM</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {topics.length} tópicos · {total} requisitos · {cycles?.find((c: any) => c.id === cycleId)?.organizations?.name ?? ''}
+            {topics.length} tópicos · {total} requisitos · {cycle?.organizations?.name ?? ''}
           </p>
         </div>
         {(cycles?.length ?? 0) > 1 && (
-          <select className="form-input w-64" value={cycleId} onChange={e => setSelectedCycleId(e.target.value)}>
+          <select className="form-input w-64" value={cycleId} onChange={e => { setSelectedCycleId(e.target.value); setSelectedFacilityId('') }}>
             {(cycles ?? []).map((c: any) => (
               <option key={c.id} value={c.id}>{c.organizations?.name} — {c.name}</option>
             ))}
           </select>
         )}
       </div>
+
+      {(facilities?.length ?? 0) > 1 && (
+        <div className="mb-5">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            Avaliação por barragem — a conformidade do cliente é a resultante (média) entre todas as barragens
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {facilities!.map((f: any) => (
+              <button key={f.id} onClick={() => setSelectedFacilityId(f.id)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-colors ${facilityId === f.id ? 'bg-brand-700 text-white border-brand-700' : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300'}`}>
+                {f.name}{f.dam_code ? ` · ${f.dam_code}` : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -550,6 +591,7 @@ export function TsmRequirementsPage() {
           requirement={selectedReq.req}
           response={selectedReq.response}
           cycleId={cycleId}
+          facilityId={facilityId}
           onClose={() => setSelectedReq(null)}
         />
       )}

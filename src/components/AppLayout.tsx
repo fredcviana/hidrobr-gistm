@@ -8,6 +8,7 @@ const NAV = [
     { to: '/dashboard',         label: 'Dashboard',         icon: LayoutDashboard },
     { to: '/dashboard-tsm', label: 'Dashboard TSM', icon: Gauge },
     { to: '/dashboard-integrado', label: 'Dashboard Integrado', icon: Layers },
+    { to: '/dashboard-barragens', label: 'Comparativo de Barragens', icon: Layers },
     { to: '/requirements',      label: 'Requisitos GISTM',  icon: ClipboardList },
     { to: '/requirements-tsm',  label: 'Requisitos TSM',    icon: ClipboardList },
     { to: '/evidences',         label: 'Evidências',        icon: Paperclip },

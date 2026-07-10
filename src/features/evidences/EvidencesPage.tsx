@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Upload, Download, Trash2, Loader2, FileText, Image, Table, Film, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
+import { cycleFacilityIds } from '@/lib/facilityScoring'
 
 const FILE_ICONS: Record<string, React.ElementType> = {
   'application/pdf': FileText,
@@ -31,6 +32,7 @@ export function EvidencesPage() {
   const qc = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [cycleId, setCycleId] = useState('')
+  const [facilityId, setFacilityId] = useState('')
   const [selectedResponse, setSelectedResponse] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
@@ -41,7 +43,7 @@ export function EvidencesPage() {
     enabled: !!profile,
     queryFn: async () => {
       let q = supabase.from('assessment_cycles')
-        .select('id,name').eq('status', 'active')
+        .select('id,name,facility_id,facility_ids').eq('status', 'active')
         .order('created_at', { ascending: false }).limit(5)
       if (!hb && profile?.organization_id) q = q.eq('organization_id', profile.organization_id)
       const { data } = await q
@@ -50,20 +52,36 @@ export function EvidencesPage() {
   })
 
   const activeCycleId = cycleId || cycles?.[0]?.id || ''
+  const activeCycle = cycles?.find((c: any) => c.id === activeCycleId)
+  const activeCycleFacilityIds = cycleFacilityIds(activeCycle)
+
+  const { data: facilities } = useQuery({
+    queryKey: ['cycle-facilities-evidences', activeCycleId, activeCycleFacilityIds.join(',')],
+    enabled: !!activeCycleId && activeCycleFacilityIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase.from('tailings_facilities').select('id,name').in('id', activeCycleFacilityIds).order('name')
+      const list = data ?? []
+      if (list.length && !facilityId) setFacilityId(list[0].id)
+      return list
+    },
+  })
+
+  const activeFacilityId = facilityId || facilities?.[0]?.id || ''
 
   // Busca respostas com requisitos — schema novo usa gistm_requirements
   const { data: responses } = useQuery({
-    queryKey: ['responses-for-evidences', activeCycleId],
-    enabled: !!activeCycleId,
+    queryKey: ['responses-for-evidences', activeCycleId, activeFacilityId],
+    enabled: !!activeCycleId && !!activeFacilityId,
     queryFn: async () => {
       // Busca respostas e depois os requisitos separadamente
       const { data: respData } = await supabase
         .from('requirement_responses')
         .select('id, requirement_id, status')
         .eq('cycle_id', activeCycleId)
+        .eq('facility_id', activeFacilityId)
         .order('created_at', { ascending: true })
       if (!respData?.length) return []
-      
+
       // Busca requisitos pelos IDs
       const reqIds = respData.map((r: any) => r.requirement_id)
       const { data: reqData } = await supabase
@@ -205,12 +223,20 @@ export function EvidencesPage() {
 
       {/* Filtros e upload */}
       <div className="card p-5 mb-5">
-        <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-4 gap-4 mb-4">
           {(cycles?.length ?? 0) > 1 && (
             <div>
               <label className="form-label">Ciclo</label>
-              <select className="form-input" value={activeCycleId} onChange={e => setCycleId(e.target.value)}>
+              <select className="form-input" value={activeCycleId} onChange={e => { setCycleId(e.target.value); setFacilityId(''); setSelectedResponse('') }}>
                 {(cycles ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+          {(facilities?.length ?? 0) > 1 && (
+            <div>
+              <label className="form-label">Barragem</label>
+              <select className="form-input" value={activeFacilityId} onChange={e => { setFacilityId(e.target.value); setSelectedResponse('') }}>
+                {(facilities ?? []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
           )}

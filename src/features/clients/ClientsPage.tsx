@@ -394,6 +394,8 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
       const { data } = await supabase.from('assessment_cycles')
         .select('*, tailings_facilities(name)').eq('organization_id', org.id).order('created_at', { ascending: false })
       return data ?? []
+      // nota: tailings_facilities(name) é o join legado (facility_id singular). A lista completa de
+      // barragens do ciclo (facility_ids) é resolvida na renderização a partir de `facilities` já carregado.
     },
   })
 
@@ -547,12 +549,18 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
               <p className="text-sm font-medium text-gray-500">Nenhum ciclo cadastrado</p>
             </div>
           )}
-          {(cycles ?? []).map((c: any) => (
+          {(cycles ?? []).map((c: any) => {
+            const facilityIdsInCycle: string[] = (c.facility_ids?.length ? c.facility_ids : (c.facility_id ? [c.facility_id] : []))
+            const facilityNames = facilityIdsInCycle
+              .map(id => (facilities ?? []).find((f: any) => f.id === id)?.name)
+              .filter(Boolean)
+            return (
             <div key={c.id} className="flex items-center gap-4 p-4">
               <div className="flex-1">
                 <div className="text-sm font-semibold text-gray-900">{c.name}</div>
                 <div className="text-xs text-gray-400 mt-0.5">
-                  {c.tailings_facilities?.name} · Ano {c.reference_year}
+                  {facilityNames.length > 0 ? facilityNames.join(', ') : (c.tailings_facilities?.name ?? 'Nenhuma barragem')} · Ano {c.reference_year}
+                  {facilityNames.length > 1 && <span className="text-brand-500"> · resultado = média entre {facilityNames.length} barragens</span>}
                   {c.target_date ? ` · Prazo: ${new Date(c.target_date).toLocaleDateString('pt-BR')}` : ''}
                 </div>
               </div>
@@ -577,7 +585,8 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
                 </button>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

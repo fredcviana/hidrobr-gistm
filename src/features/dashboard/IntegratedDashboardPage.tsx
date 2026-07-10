@@ -1,8 +1,10 @@
 // src/features/dashboard/IntegratedDashboardPage.tsx
 import { useQuery } from '@tanstack/react-query'
-import { Loader2, AlertCircle, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Loader2, AlertCircle, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle, Layers } from 'lucide-react'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 import { supabase } from '@/lib/supabase'
+import { cycleFacilityIds, buildRequirementScoreMaps } from '@/lib/facilityScoring'
 
 const TSM_STANDARD_ID = 2
 
@@ -97,31 +99,31 @@ export function IntegratedDashboardPage() {
         cycle: null,
         gistm: { score: 0, kpis: { total: 0, approved: 0 }, topics: [] },
         tsm: { score: 0, kpis: { total: 0, approved: 0 }, topics: [] },
-        combinedScore: 0,
+        combinedScore: 0, facilityCount: 0,
       }
+
+      const facilityIds = cycleFacilityIds(cycle)
 
       // ── GISTM ──────────────────────────────────────────
       const { data: gTopics } = await supabase.from('gistm_topics').select('*').order('display_order')
       const { data: gPrinciples } = await supabase.from('gistm_principles').select('*').order('display_order')
       const { data: gRequirements } = await supabase.from('gistm_requirements').select('*')
-      const { data: gResponses } = await supabase.from('requirement_responses').select('*').eq('cycle_id', cycle.id)
+      const { data: gResponses } = facilityIds.length > 0
+        ? await supabase.from('requirement_responses').select('*').eq('cycle_id', cycle.id).in('facility_id', facilityIds)
+        : { data: [] as any[] }
       const gRespIds = (gResponses ?? []).map((r: any) => r.id)
       const { data: gAssessments } = gRespIds.length > 0
         ? await supabase.from('hidrobr_assessments').select('response_id, score_value, published_at').in('response_id', gRespIds)
         : { data: [] as any[] }
 
       const gAssessMap = new Map((gAssessments ?? []).map((a: any) => [a.response_id, a]))
-      const gRespByReqId = new Map((gResponses ?? []).map((r: any) => [r.requirement_id, r]))
+      const { clientScoreByRequirement: gClientScore } = buildRequirementScoreMaps(facilityIds, gResponses ?? [], gAssessMap)
 
       let gWeightedSum = 0, gTotalWeight = 0
       ;(gRequirements ?? []).forEach((req: any) => {
         const w = Number(req.weight) || 1
         gTotalWeight += w
-        const resp = gRespByReqId.get(req.id)
-        if (resp) {
-          const sv = gAssessMap.get(resp.id)?.score_value
-          if (sv != null) gWeightedSum += sv * w
-        }
+        gWeightedSum += (gClientScore.get(req.id) ?? 0) * w
       })
       const gScore = gTotalWeight > 0 ? Math.round(gWeightedSum / gTotalWeight) : 0
       const gApproved = (gResponses ?? []).filter((r: any) => r.status === 'approved').length
@@ -133,11 +135,7 @@ export function IntegratedDashboardPage() {
         tReqs.forEach((req: any) => {
           const w = Number(req.weight) || 1
           wTotal += w
-          const resp = gRespByReqId.get(req.id)
-          if (resp) {
-            const sv = gAssessMap.get(resp.id)?.score_value
-            if (sv != null) wSum += sv * w
-          }
+          wSum += (gClientScore.get(req.id) ?? 0) * w
         })
         return {
           code: topic.code, title: topic.title,
@@ -150,8 +148,8 @@ export function IntegratedDashboardPage() {
       const { data: tTopics } = await supabase.from('standard_topics').select('*').eq('standard_id', TSM_STANDARD_ID).order('display_order')
       const { data: tRequirements } = await supabase.from('standard_requirements').select('*').eq('standard_id', TSM_STANDARD_ID).order('display_order')
       const tReqIds = (tRequirements ?? []).map((r: any) => r.id)
-      const { data: tResponses } = tReqIds.length > 0
-        ? await supabase.from('tsm_responses').select('*').eq('cycle_id', cycle.id).in('requirement_id', tReqIds)
+      const { data: tResponses } = tReqIds.length > 0 && facilityIds.length > 0
+        ? await supabase.from('tsm_responses').select('*').eq('cycle_id', cycle.id).in('facility_id', facilityIds).in('requirement_id', tReqIds)
         : { data: [] as any[] }
       const tRespIds = (tResponses ?? []).map((r: any) => r.id)
       const { data: tAssessments } = tRespIds.length > 0
@@ -159,17 +157,13 @@ export function IntegratedDashboardPage() {
         : { data: [] as any[] }
 
       const tAssessMap = new Map((tAssessments ?? []).map((a: any) => [a.response_id, a]))
-      const tRespByReqId = new Map((tResponses ?? []).map((r: any) => [r.requirement_id, r]))
+      const { clientScoreByRequirement: tClientScore } = buildRequirementScoreMaps(facilityIds, tResponses ?? [], tAssessMap)
 
       let tWeightedSum = 0, tTotalWeight = 0
       ;(tRequirements ?? []).forEach((req: any) => {
         const w = Number(req.weight) || 1
         tTotalWeight += w
-        const resp = tRespByReqId.get(req.id)
-        if (resp) {
-          const sv = tAssessMap.get(resp.id)?.score_value
-          if (sv != null) tWeightedSum += sv * w
-        }
+        tWeightedSum += (tClientScore.get(req.id) ?? 0) * w
       })
       const tScore = tTotalWeight > 0 ? Math.round(tWeightedSum / tTotalWeight) : 0
       const tApproved = (tResponses ?? []).filter((r: any) => r.status === 'approved').length
@@ -180,11 +174,7 @@ export function IntegratedDashboardPage() {
         tReqs.forEach((req: any) => {
           const w = Number(req.weight) || 1
           wTotal += w
-          const resp = tRespByReqId.get(req.id)
-          if (resp) {
-            const sv = tAssessMap.get(resp.id)?.score_value
-            if (sv != null) wSum += sv * w
-          }
+          wSum += (tClientScore.get(req.id) ?? 0) * w
         })
         return {
           code: topic.code, title: topic.title, icon: topic.icon,
@@ -197,9 +187,9 @@ export function IntegratedDashboardPage() {
 
       return {
         cycle,
-        gistm: { score: gScore, kpis: { total: (gRequirements ?? []).length, approved: gApproved }, topics: gTopicData },
-        tsm: { score: tScore, kpis: { total: (tRequirements ?? []).length, approved: tApproved }, topics: tTopicData },
-        combinedScore,
+        gistm: { score: gScore, kpis: { total: (gRequirements ?? []).length * (facilityIds.length || 1), approved: gApproved }, topics: gTopicData },
+        tsm: { score: tScore, kpis: { total: (tRequirements ?? []).length * (facilityIds.length || 1), approved: tApproved }, topics: tTopicData },
+        combinedScore, facilityCount: facilityIds.length,
       }
     },
   })
@@ -211,7 +201,7 @@ export function IntegratedDashboardPage() {
     </div>
   )
 
-  const { cycle, gistm, tsm, combinedScore } = data as any
+  const { cycle, gistm, tsm, combinedScore, facilityCount } = data as any
 
   if (!cycle) return (
     <div className="p-6">
@@ -231,11 +221,21 @@ export function IntegratedDashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Dashboard Integrado</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{cycle.name} · {cycle.organizations?.name}</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {cycle.name} · {cycle.organizations?.name}
+            {facilityCount > 1 && <span className="text-gray-400"> · resultado consolidado de {facilityCount} barragens</span>}
+          </p>
         </div>
-        <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Ciclo ativo
-        </span>
+        <div className="flex items-center gap-2">
+          {facilityCount > 1 && (
+            <Link to="/dashboard-barragens" className="badge bg-brand-50 text-brand-700 border border-brand-200 inline-flex items-center gap-1.5 hover:bg-brand-100 transition-colors">
+              <Layers className="w-3 h-3" /> Comparar barragens
+            </Link>
+          )}
+          <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Ciclo ativo
+          </span>
+        </div>
       </div>
 
       {/* Gauges comparativos */}

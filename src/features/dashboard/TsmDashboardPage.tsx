@@ -1,9 +1,11 @@
 // src/features/dashboard/TsmDashboardPage.tsx
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Loader2, AlertCircle, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle } from 'lucide-react'
+import { Loader2, AlertCircle, Shield, AlertTriangle, Heart, Trash2, Leaf, Cloud, Droplet, Users, Circle, Layers } from 'lucide-react'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 import { supabase } from '@/lib/supabase'
+import { cycleFacilityIds, buildRequirementScoreMaps } from '@/lib/facilityScoring'
 
 const TSM_STANDARD_ID = 2
 
@@ -96,14 +98,16 @@ export function TsmDashboardPage() {
       if (!cycle) return {
         cycle: null, overallScore: 0,
         kpis: { total: 0, approved: 0, pending: 0, notStarted: 0 },
-        topicProgressData: [], timelineData: [],
+        topicProgressData: [], timelineData: [], facilityCount: 0,
       }
+
+      const facilityIds = cycleFacilityIds(cycle)
 
       const { data: topics } = await supabase.from('standard_topics').select('*').eq('standard_id', TSM_STANDARD_ID).order('display_order')
       const { data: requirements } = await supabase.from('standard_requirements').select('*').eq('standard_id', TSM_STANDARD_ID).order('display_order')
       const reqIds = (requirements ?? []).map((r: any) => r.id)
-      const { data: responses } = reqIds.length > 0
-        ? await supabase.from('tsm_responses').select('*').eq('cycle_id', cycle.id).in('requirement_id', reqIds)
+      const { data: responses } = reqIds.length > 0 && facilityIds.length > 0
+        ? await supabase.from('tsm_responses').select('*').eq('cycle_id', cycle.id).in('facility_id', facilityIds).in('requirement_id', reqIds)
         : { data: [] as any[] }
       const respIds = (responses ?? []).map((r: any) => r.id)
       const { data: assessments } = respIds.length > 0
@@ -111,9 +115,9 @@ export function TsmDashboardPage() {
         : { data: [] as any[] }
 
       const assessMap = new Map((assessments ?? []).map((a: any) => [a.response_id, a]))
-      const respByReqId = new Map((responses ?? []).map((r: any) => [r.requirement_id, r]))
+      const { clientScoreByRequirement } = buildRequirementScoreMaps(facilityIds, responses ?? [], assessMap)
 
-      const totalReqs = (requirements ?? []).length
+      const totalReqs = (requirements ?? []).length * (facilityIds.length || 1)
       const approved = (responses ?? []).filter((r: any) => r.status === 'approved').length
       const pending = (responses ?? []).filter((r: any) => r.status === 'submitted').length
       const notStarted = totalReqs - (responses ?? []).length + (responses ?? []).filter((r: any) => r.status === 'not_started').length
@@ -122,43 +126,37 @@ export function TsmDashboardPage() {
       ;(requirements ?? []).forEach((req: any) => {
         const w = Number(req.weight) || 1
         totalWeight += w
-        const resp = respByReqId.get(req.id)
-        if (resp) {
-          const sv = assessMap.get(resp.id)?.score_value
-          if (sv != null) weightedSum += sv * w
-        }
+        weightedSum += (clientScoreByRequirement.get(req.id) ?? 0) * w
       })
       const overallScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0
 
       const topicProgressData = (topics ?? []).map((topic: any) => {
         const tReqs = (requirements ?? []).filter((r: any) => r.topic_id === topic.id)
-        const tApproved = tReqs.filter((r: any) => respByReqId.get(r.id)?.status === 'approved').length
+        const tReqIds = new Set(tReqs.map((r: any) => r.id))
+        const tInstances = (responses ?? []).filter((r: any) => tReqIds.has(r.requirement_id))
+        const tApproved = tInstances.filter((r: any) => r.status === 'approved').length
         let wSum = 0, wTotal = 0
         tReqs.forEach((req: any) => {
           const w = Number(req.weight) || 1
           wTotal += w
-          const resp = respByReqId.get(req.id)
-          if (resp) {
-            const sv = assessMap.get(resp.id)?.score_value
-            if (sv != null) wSum += sv * w
-          }
+          wSum += (clientScoreByRequirement.get(req.id) ?? 0) * w
         })
         return {
           id: topic.id, code: topic.code, title: topic.title, icon: topic.icon,
           color: topic.color_hex ?? '#0A9396',
           score: wTotal > 0 ? Math.round(wSum / wTotal) : 0,
-          approved: tApproved, total: tReqs.length,
+          approved: tApproved, total: tInstances.length,
         }
       })
 
       const dates = Array.from(new Set((assessments ?? []).filter((a: any) => a.published_at).map((a: any) => a.published_at.slice(0, 10)))).sort()
       const timelineData = dates.map((d: any) => {
+        const assessUntilMap = new Map((assessments ?? []).filter((a: any) => a.published_at && a.published_at.slice(0, 10) <= d).map((a: any) => [a.response_id, a]))
+        const { clientScoreByRequirement: scoreAtDate } = buildRequirementScoreMaps(facilityIds, responses ?? [], assessUntilMap)
         let wSum = 0
         ;(requirements ?? []).forEach((req: any) => {
           const w = Number(req.weight) || 1
-          const resp = respByReqId.get(req.id)
-          const a = resp && assessMap.get(resp.id)
-          if (a?.published_at && a.published_at.slice(0, 10) <= d && a.score_value != null) wSum += a.score_value * w
+          wSum += (scoreAtDate.get(req.id) ?? 0) * w
         })
         return { data: d, aderencia: totalWeight > 0 ? Math.round(wSum / totalWeight) : 0 }
       })
@@ -167,7 +165,7 @@ export function TsmDashboardPage() {
       return {
         cycle, overallScore,
         kpis: { total: totalReqs, approved, pending, notStarted },
-        topicProgressData, timelineData,
+        topicProgressData, timelineData, facilityCount: facilityIds.length,
       }
     },
   })
@@ -179,7 +177,7 @@ export function TsmDashboardPage() {
     </div>
   )
 
-  const { cycle, overallScore, kpis, topicProgressData, timelineData } = data as any
+  const { cycle, overallScore, kpis, topicProgressData, timelineData, facilityCount } = data as any
 
   if (!cycle) return (
     <div className="p-6">
@@ -199,11 +197,21 @@ export function TsmDashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Dashboard TSM</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{cycle.name} · {cycle.organizations?.name}</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {cycle.name} · {cycle.organizations?.name}
+            {facilityCount > 1 && <span className="text-gray-400"> · resultado consolidado de {facilityCount} barragens</span>}
+          </p>
         </div>
-        <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Ciclo ativo
-        </span>
+        <div className="flex items-center gap-2">
+          {facilityCount > 1 && (
+            <Link to="/dashboard-barragens" className="badge bg-brand-50 text-brand-700 border border-brand-200 inline-flex items-center gap-1.5 hover:bg-brand-100 transition-colors">
+              <Layers className="w-3 h-3" /> Comparar barragens
+            </Link>
+          )}
+          <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Ciclo ativo
+          </span>
+        </div>
       </div>
 
       {/* KPIs */}
