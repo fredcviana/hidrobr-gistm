@@ -13,10 +13,11 @@ const PRIORITY: Record<string, { label: string; cls: string }> = {
   low:      { label: 'Baixa',    cls: 'bg-green-100 text-green-700' },
 }
 const STATUS_ACTION: Record<string, { label: string; cls: string }> = {
-  open:        { label: 'Aberta',       cls: 'bg-blue-50 text-blue-700' },
-  in_progress: { label: 'Em andamento', cls: 'bg-purple-50 text-purple-700' },
-  completed:   { label: 'Concluída',    cls: 'bg-emerald-50 text-emerald-700' },
-  cancelled:   { label: 'Cancelada',    cls: 'bg-gray-100 text-gray-500' },
+  open:             { label: 'Aberta',                cls: 'bg-blue-50 text-blue-700' },
+  in_progress:      { label: 'Em andamento',          cls: 'bg-purple-50 text-purple-700' },
+  pending_approval: { label: 'Aguardando aprovação',  cls: 'bg-amber-50 text-amber-700' },
+  completed:        { label: 'Concluída',             cls: 'bg-emerald-50 text-emerald-700' },
+  cancelled:        { label: 'Cancelada',              cls: 'bg-gray-100 text-gray-500' },
 }
 const SCORE_OPTIONS = [
   { key: 'fully_conforming',     label: 'Totalmente Conforme',   value: 100, color: '#059669', bg: '#D1FAE5' },
@@ -97,16 +98,26 @@ function PrincipleSelector({ value, onChange }: { value: string[]; onChange: (v:
 }
 
 // ── Modal de Reavaliação ──────────────────────────────────────
-function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete }: {
+function ReassessmentModal({ action, cycleId, facilityIds, onClose, onComplete, onCreateFollowUp }: {
   action: any; cycleId: string; facilityIds: string[]; onClose: () => void; onComplete: () => void
+  onCreateFollowUp?: (parentAction: any) => void
 }) {
   const { profile } = useAuthStore()
+  const hb = isHidrobr(profile?.role)
   const qc = useQueryClient()
   const [globalScore, setGlobalScore] = useState('')
   const [globalText, setGlobalText] = useState('')
   const [saving, setSaving] = useState(false)
   const [errMsg, setErrMsg] = useState('')
   const [expandedReq, setExpandedReq] = useState<string | null>(null)
+  // Resultado da avaliação HIDROBR desta sessão (para a tela de confirmação com
+  // atalho de criar ação de acompanhamento) — null enquanto não publicado.
+  const [evalResult, setEvalResult] = useState<{ approved: boolean; finalGain: number | null } | null>(null)
+
+  // Cliente só pode *solicitar* aprovação (sem escolher nota); a classificação final é
+  // exclusividade da HIDROBR — fecha o gap em que qualquer usuário podia se autoavaliar.
+  const clientRequestMode = !hb && action.status !== 'pending_approval'
+  const clientWaitingMode = !hb && action.status === 'pending_approval'
 
   // Estado individual por requisito
   const [overrides, setOverrides] = useState<Record<string, { score: string; text: string; responseText: string }>>({})
