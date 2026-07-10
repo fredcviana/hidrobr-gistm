@@ -577,7 +577,12 @@ async function computeGainFromLinks(links: any[], cycleId: string, facilityIds: 
     gistmGainPoints += gap
     breakdown.push({
       code: req.code, standard: 'gistm', currentScore, weight: w, share,
-      gap: Math.round(gap), pctOfGlobal: gistmTotalWeight > 0 ? (gap / gistmTotalWeight) * 100 : 0,
+      // NOTA (bug corrigido): `gap` já está na mesma escala 0-100 do score global
+      // (é (100-score)*peso, e o score global = Σ(score·peso)/Σpeso). Logo a
+      // contribuição percentual de UM item é gap/pesoTotal diretamente — SEM
+      // multiplicar por 100 de novo (isso inflava o valor em 100x e fazia o
+      // "ganho estimado" da ação bater no teto de 100% quase sempre).
+      gap: Math.round(gap), pctOfGlobal: gistmTotalWeight > 0 ? gap / gistmTotalWeight : 0,
     })
   })
 
@@ -591,12 +596,16 @@ async function computeGainFromLinks(links: any[], cycleId: string, facilityIds: 
     tsmGainPoints += gap
     breakdown.push({
       code: req.code, standard: 'tsm', currentScore, weight: w, share,
-      gap: Math.round(gap), pctOfGlobal: tsmTotalWeight > 0 ? (gap / tsmTotalWeight) * 100 : 0,
+      gap: Math.round(gap), pctOfGlobal: tsmTotalWeight > 0 ? gap / tsmTotalWeight : 0,
     })
   })
 
-  const gistmGainPct = gistmTotalWeight > 0 ? (gistmGainPoints / gistmTotalWeight) * 100 : 0
-  const tsmGainPct = tsmTotalWeight > 0 ? (tsmGainPoints / tsmTotalWeight) * 100 : 0
+  // gistmGainPoints/gistmGainPts já estão na escala 0-100 (mesma escala do score
+  // global). Dividir pelo peso total do catálogo dá diretamente os pontos percentuais
+  // de ganho — sem multiplicar por 100 de novo (bug anterior inflava isso em 100x e
+  // o "ganho estimado" batia no teto de 100% para praticamente qualquer ação vinculada).
+  const gistmGainPct = gistmTotalWeight > 0 ? gistmGainPoints / gistmTotalWeight : 0
+  const tsmGainPct = tsmTotalWeight > 0 ? tsmGainPoints / tsmTotalWeight : 0
   const maxGain = Math.round((gistmGainPct + tsmGainPct) * 100) / 100
 
   return { maxGain: Math.min(100, maxGain), breakdown, totalWeight: gistmTotalWeight + tsmTotalWeight }
@@ -719,7 +728,7 @@ function ActionModal({ defaultOrgId, item, onClose }: { defaultOrgId: string; it
           currentScore,
           weight: w,
           gap: Math.round(gap),
-          pctOfGlobal: totalWeight > 0 ? (gap / totalWeight) * 100 : 0,
+          pctOfGlobal: totalWeight > 0 ? gap / totalWeight : 0,
         })
       })
 
