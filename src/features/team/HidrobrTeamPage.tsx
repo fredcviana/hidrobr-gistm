@@ -14,20 +14,23 @@ const ROLE_CONFIG: Record<string, { label: string; cls: string }> = {
 }
 
 // ── Painel de clientes atribuídos ─────────────────────────────
+// Atribuição é por cliente (organization_team_members, N:N), não por ciclo —
+// permite vários membros da equipe HIDROBR no mesmo cliente simultaneamente.
 function ConsultantClients({ consultantId, consultantName }: { consultantId: string; consultantName: string }) {
-  const { data: cycles } = useQuery({
-    queryKey: ['consultant-cycles', consultantId],
+  const qc = useQueryClient()
+
+  const { data: assignedOrgs } = useQuery({
+    queryKey: ['consultant-orgs', consultantId],
     queryFn: async () => {
       const { data } = await supabase
-        .from('assessment_cycles')
-        .select('id, name, status, organizations(name), tailings_facilities(name)')
-        .eq('assigned_consultant', consultantId)
-        .order('created_at', { ascending: false })
+        .from('organization_team_members')
+        .select('id, organization_id, organizations(name)')
+        .eq('profile_id', consultantId)
       return data ?? []
     },
   })
 
-  const { data: orgs } = useQuery({
+  const { data: allOrgs } = useQuery({
     queryKey: ['all-orgs-for-assign'],
     queryFn: async () => {
       const { data } = await supabase.from('organizations').select('id,name').eq('is_active', true).order('name')
@@ -35,58 +38,39 @@ function ConsultantClients({ consultantId, consultantName }: { consultantId: str
     },
   })
 
-  const { data: activeCycles } = useQuery({
-    queryKey: ['unassigned-cycles'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('assessment_cycles')
-        .select('id, name, organizations(name)')
-        .eq('status', 'active')
-        .is('assigned_consultant', null)
-      return data ?? []
-    },
-  })
-
-  const qc = useQueryClient()
   const assignMut = useMutation({
-    mutationFn: async (cycleId: string) => {
-      await supabase.from('assessment_cycles').update({ assigned_consultant: consultantId }).eq('id', cycleId)
+    mutationFn: async (organizationId: string) => {
+      await supabase.from('organization_team_members').insert({ organization_id: organizationId, profile_id: consultantId })
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['consultant-cycles', consultantId] })
-      qc.invalidateQueries({ queryKey: ['unassigned-cycles'] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['consultant-orgs', consultantId] }),
   })
 
   const unassignMut = useMutation({
-    mutationFn: async (cycleId: string) => {
-      await supabase.from('assessment_cycles').update({ assigned_consultant: null }).eq('id', cycleId)
+    mutationFn: async (organizationId: string) => {
+      await supabase.from('organization_team_members').delete().eq('organization_id', organizationId).eq('profile_id', consultantId)
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['consultant-cycles', consultantId] })
-      qc.invalidateQueries({ queryKey: ['unassigned-cycles'] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['consultant-orgs', consultantId] }),
   })
+
+  const assignedIds = new Set((assignedOrgs ?? []).map((a: any) => a.organization_id))
+  const availableOrgs = (allOrgs ?? []).filter((o: any) => !assignedIds.has(o.id))
 
   return (
     <div className="mt-4 border-t border-gray-100 pt-4">
       <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-        Ciclos atribuídos a {consultantName.split(' ')[0]}
+        Clientes atribuídos a {consultantName.split(' ')[0]}
       </div>
 
-      {(cycles ?? []).length === 0 ? (
-        <p className="text-xs text-gray-400 mb-3">Nenhum ciclo atribuído.</p>
+      {(assignedOrgs ?? []).length === 0 ? (
+        <p className="text-xs text-gray-400 mb-3">Nenhum cliente atribuído.</p>
       ) : (
         <div className="space-y-2 mb-3">
-          {(cycles ?? []).map((c: any) => (
-            <div key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-              <div>
-                <div className="text-xs font-semibold text-gray-800">{c.organizations?.name}</div>
-                <div className="text-[10px] text-gray-400">{c.name}</div>
-              </div>
+          {(assignedOrgs ?? []).map((a: any) => (
+            <div key={a.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+              <div className="text-xs font-semibold text-gray-800">{a.organizations?.name}</div>
               <button
                 className="text-xs text-red-400 hover:text-red-600 transition-colors"
-                onClick={() => unassignMut.mutate(c.id)}
+                onClick={() => unassignMut.mutate(a.organization_id)}
               >
                 Remover
               </button>
@@ -95,19 +79,16 @@ function ConsultantClients({ consultantId, consultantName }: { consultantId: str
         </div>
       )}
 
-      {(activeCycles ?? []).length > 0 && (
+      {availableOrgs.length > 0 && (
         <div>
-          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Atribuir ciclo sem consultor</div>
+          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Atribuir cliente</div>
           <div className="space-y-1">
-            {(activeCycles ?? []).map((c: any) => (
-              <button key={c.id}
+            {availableOrgs.map((o: any) => (
+              <button key={o.id}
                 className="w-full flex items-center justify-between bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-2 transition-colors text-left"
-                onClick={() => assignMut.mutate(c.id)}
+                onClick={() => assignMut.mutate(o.id)}
               >
-                <div>
-                  <div className="text-xs font-semibold text-blue-800">{c.organizations?.name}</div>
-                  <div className="text-[10px] text-blue-500">{c.name}</div>
-                </div>
+                <div className="text-xs font-semibold text-blue-800">{o.name}</div>
                 <span className="text-[10px] text-blue-600 font-semibold">+ Atribuir</span>
               </button>
             ))}

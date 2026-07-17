@@ -103,22 +103,6 @@ export function LoginPage() {
                   {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Entrando...</> : 'Entrar no sistema'}
                 </button>
               </form>
-
-              <div className="mt-6 pt-6 border-t border-gray-100">
-                <p className="text-xs text-gray-400 mb-3 font-medium uppercase tracking-wider">Credenciais criadas no Supabase</p>
-                <div className="space-y-2">
-                  {[
-                    { role: 'HIDROBR Admin', email: 'admin@hidrobr.com.br' },
-                    { role: 'Consultor', email: 'consultor@hidrobr.com.br' },
-                    { role: 'Cliente', email: 'cliente@mineracao.com.br' },
-                  ].map(u => (
-                    <div key={u.role} className="bg-gray-50 rounded-lg px-3 py-2 text-xs">
-                      <span className="font-semibold text-gray-700">{u.role}: </span>
-                      <span className="text-gray-500">{u.email}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </>
           ) : (
             <>

@@ -246,6 +246,18 @@ create table user_progress (
   unique(user_id, content_id, trail_id)
 );
 
+-- ── EQUIPE HIDROBR ATRIBUÍDA AO CLIENTE (N:N) ─────────────────
+-- Substitui o antigo assessment_cycles.assigned_consultant (1 consultor por
+-- ciclo) por uma atribuição no nível do cliente, permitindo várias pessoas
+-- da equipe HIDROBR no mesmo cliente.
+create table organization_team_members (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null references organizations(id) on delete cascade,
+  profile_id uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz default now(),
+  unique (organization_id, profile_id)
+);
+
 -- ── ÍNDICES ───────────────────────────────────────────────────
 create index idx_profiles_org on profiles(organization_id);
 create index idx_profiles_role on profiles(role);
@@ -256,6 +268,8 @@ create index idx_responses_status on requirement_responses(cycle_id, status);
 create index idx_evidences_response on evidences(response_id);
 create index idx_notifications_user on notifications(user_id, is_read);
 create index idx_actions_org on action_items(organization_id, status);
+create index idx_org_team_members_org on organization_team_members(organization_id);
+create index idx_org_team_members_profile on organization_team_members(profile_id);
 
 -- ── ROW LEVEL SECURITY ────────────────────────────────────────
 alter table organizations enable row level security;
@@ -271,6 +285,7 @@ alter table notifications enable row level security;
 alter table academy_contents enable row level security;
 alter table learning_trails enable row level security;
 alter table user_progress enable row level security;
+alter table organization_team_members enable row level security;
 
 -- Políticas: usuário lê seus próprios dados ou dados da sua org
 -- GISTM topics e requirements são públicos (leitura)
@@ -357,6 +372,17 @@ create policy "facilities_access" on tailings_facilities for select using (
   or exists (select 1 from profiles where id = auth.uid() and role in ('hidrobr_admin','hidrobr_consultant'))
 );
 
+-- Equipe do cliente: mesma lógica de leitura; só hidrobr_admin gerencia atribuições
+create policy "org_team_members_select" on organization_team_members for select using (
+  organization_id in (select organization_id from profiles where id = auth.uid())
+  or exists (select 1 from profiles where id = auth.uid() and role in ('hidrobr_admin','hidrobr_consultant'))
+);
+create policy "org_team_members_write" on organization_team_members for all using (
+  exists (select 1 from profiles where id = auth.uid() and role = 'hidrobr_admin')
+) with check (
+  exists (select 1 from profiles where id = auth.uid() and role = 'hidrobr_admin')
+);
+
 -- ── TRIGGER: criar profile ao registrar usuário ───────────────
 create or replace function public.handle_new_user()
 returns trigger as $$
@@ -374,6 +400,14 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ── MIGRAÇÃO: preserva atribuições antigas (1 consultor/ciclo) ─
+-- na nova tabela de equipe por cliente (N:N).
+insert into organization_team_members (organization_id, profile_id)
+select distinct organization_id, assigned_consultant
+from assessment_cycles
+where assigned_consultant is not null
+on conflict (organization_id, profile_id) do nothing;
 
 -- ── SEED: TÓPICOS E PRINCÍPIOS GISTM ─────────────────────────
 insert into gistm_topics (code,title,display_order,color_hex,icon) values
