@@ -1,7 +1,9 @@
 // src/components/AppLayout.tsx
+import { useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
-import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Settings, Users, Inbox, Gauge, Layers } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Paperclip, CheckSquare, GraduationCap, Building2, Bell, LogOut, Settings, Users, Inbox, Gauge, Layers, KeyRound } from 'lucide-react'
+import { ChangePasswordModal } from '@/features/auth/ChangePasswordModal'
 
 const NAV = [
   { section: 'Principal', items: [
@@ -33,6 +35,7 @@ export function AppLayout() {
   const hb = isHidrobr(profile?.role)
   const isAdmin = profile?.role === 'hidrobr_admin'
   const initials = profile?.full_name?.split(' ').slice(0,2).map((n:string)=>n[0]).join('')??'?'
+  const [showChangePassword, setShowChangePassword] = useState(false)
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
@@ -81,10 +84,12 @@ export function AppLayout() {
                 {profile?.role==='hidrobr_admin'?'Admin HIDROBR':profile?.role==='hidrobr_consultant'?'Consultor HIDROBR':profile?.role==='client_admin'?'Admin Cliente':profile?.role==='client_user'?'Usuário Cliente':'Visualizador'}
               </div>
             </div>
+            <button onClick={() => setShowChangePassword(true)} className="text-white/30 hover:text-white/70 p-1 rounded" title="Alterar senha"><KeyRound className="w-3.5 h-3.5"/></button>
             <button onClick={logout} className="text-white/30 hover:text-white/70 p-1 rounded" title="Sair"><LogOut className="w-3.5 h-3.5"/></button>
           </div>
         </div>
       </aside>
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="h-[60px] bg-white border-b border-gray-200 flex items-center px-6 gap-4 flex-shrink-0">
           <div className="flex-1"><span className="text-sm text-gray-400">{(profile as any)?.organization?.name??(hb?'HIDROBR Soluções Integradas':'')}</span></div>

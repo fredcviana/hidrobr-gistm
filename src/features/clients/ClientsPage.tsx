@@ -1,11 +1,12 @@
 // src/features/clients/ClientsPage.tsx
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Building2, ChevronRight, Loader2, X, Save, AlertCircle, Edit2 } from 'lucide-react'
+import { Plus, Building2, ChevronRight, Loader2, X, Save, AlertCircle, Edit2, KeyRound } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore, isHidrobr } from '@/store/authStore'
 import { CreateUserModal } from './CreateUserModal'
 import { CreateCycleModal } from './CreateCycleModal'
+import { AdminSetPasswordModal } from '@/features/auth/AdminSetPasswordModal'
 
 // ── Modal genérico ────────────────────────────────────────────
 function Modal({ title, onClose, children, footer }: {
@@ -355,6 +356,7 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
   const [tab, setTab] = useState<'users' | 'facilities' | 'cycles'>('facilities')
   const [modal, setModal] = useState<'user' | 'facility' | 'cycle' | null>(null)
   const [editingFacility, setEditingFacility] = useState<any>(null)
+  const [passwordUser, setPasswordUser] = useState<{ id: string; full_name: string } | null>(null)
 
   const deleteCycleMut = useMutation({
     mutationFn: async (cycleId: string) => {
@@ -526,6 +528,14 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
                 </div>
                 <span className="badge bg-blue-50 text-blue-700">{ROLE_LABELS[u.role] ?? u.role}</span>
                 {!u.is_active && <span className="badge bg-gray-100 text-gray-500">Inativo</span>}
+                {isAdmin && (
+                  <button
+                    className="text-xs px-3 py-1.5 rounded-lg font-semibold border text-gray-600 border-gray-200 hover:bg-gray-50 inline-flex items-center gap-1.5"
+                    onClick={() => setPasswordUser({ id: u.id, full_name: u.full_name })}
+                  >
+                    <KeyRound className="w-3.5 h-3.5" /> Trocar senha
+                  </button>
+                )}
                 {(hb || isAdmin) && (
                   <button
                     className={`text-xs px-3 py-1.5 rounded-lg font-semibold border transition-colors ${u.is_active ? 'text-red-500 border-red-200 hover:bg-red-50' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}
@@ -538,6 +548,10 @@ function OrgDetail({ org, onBack }: { org: any; onBack: () => void }) {
             ))}
           </div>
         </div>
+      )}
+
+      {passwordUser && (
+        <AdminSetPasswordModal userId={passwordUser.id} userName={passwordUser.full_name} onClose={() => setPasswordUser(null)} />
       )}
 
       {/* Ciclos */}

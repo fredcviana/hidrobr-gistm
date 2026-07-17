@@ -1,11 +1,12 @@
 // src/features/team/HidrobrTeamPage.tsx
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Loader2, X, Save, UserCheck, UserX, Mail, Briefcase } from 'lucide-react'
+import { Plus, Loader2, X, Save, UserCheck, UserX, Mail, Briefcase, KeyRound } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import { Navigate } from 'react-router-dom'
 import { CreateHidrobrUserModal } from './CreateHidrobrUserModal'
+import { AdminSetPasswordModal } from '@/features/auth/AdminSetPasswordModal'
 
 const ROLE_CONFIG: Record<string, { label: string; cls: string }> = {
   hidrobr_admin:      { label: 'Administrador',       cls: 'bg-purple-50 text-purple-700' },
@@ -202,6 +203,7 @@ function TeamMemberCard({ member }: { member: any }) {
   const qc = useQueryClient()
   const [showEdit, setShowEdit] = useState(false)
   const [showClients, setShowClients] = useState(false)
+  const [showSetPassword, setShowSetPassword] = useState(false)
 
   const toggleActive = useMutation({
     mutationFn: async () => {
@@ -257,6 +259,12 @@ function TeamMemberCard({ member }: { member: any }) {
           >
             {member.is_active ? <><UserX className="w-3.5 h-3.5" /> Desativar</> : <><UserCheck className="w-3.5 h-3.5" /> Reativar</>}
           </button>
+          <button
+            style={{display:'inline-flex',alignItems:'center',gap:'6px',padding:'5px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600',background:'white',color:'#374151',border:'1px solid #D1D5DB',cursor:'pointer'}}
+            onClick={() => setShowSetPassword(true)}
+          >
+            <KeyRound className="w-3.5 h-3.5" /> Trocar senha
+          </button>
         </div>
 
         {showClients && (
@@ -265,6 +273,9 @@ function TeamMemberCard({ member }: { member: any }) {
       </div>
 
       {showEdit && <TeamMemberModal member={member} onClose={() => setShowEdit(false)} />}
+      {showSetPassword && (
+        <AdminSetPasswordModal userId={member.id} userName={member.full_name} onClose={() => setShowSetPassword(false)} />
+      )}
     </>
   )
 }
